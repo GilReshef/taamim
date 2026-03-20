@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="טעמים">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1A1A18">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>טעמים</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{--safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px);--safe-l:env(safe-area-inset-left,0px);--safe-r:env(safe-area-inset-right,0px)}
+html,body{height:100%;overflow:hidden;background:#F7F6F2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+#root{height:100%;display:flex;flex-direction:column;direction:rtl;color:#1A1A18;padding-top:var(--safe-top)}
+.screen{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#F7F6F2;padding-bottom:calc(56px + var(--safe-bot))}
+/* top nav */
+.topnav{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #E0DED6;display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:52px;flex-shrink:0}
+.logo{font-size:20px;font-weight:700;color:#1A1A18;letter-spacing:-.5px}.logo span{color:#BA7517}
+.backbtn{display:flex;align-items:center;gap:6px;padding:8px 14px;background:#1A1A18;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;min-width:70px}
+/* bottom tab bar */
+.tabbar{position:fixed;bottom:0;left:0;right:0;z-index:20;background:#fff;border-top:1px solid #E0DED6;display:flex;padding-bottom:var(--safe-bot);flex-shrink:0}
+.tabitem{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 0;cursor:pointer;gap:3px;border:none;background:transparent}
+.tabitem svg{width:22px;height:22px}
+.tabitem span{font-size:10px;font-weight:600}
+.tabitem.active{color:#1A1A18}.tabitem:not(.active){color:#AAA}
+/* cards / common */
+.card{background:#fff;border:1px solid #E0DED6;border-radius:12px;padding:14px}
+.tag{display:inline-block;padding:3px 9px;border-radius:9px;font-size:11px;font-weight:700}
+.fi{width:100%;padding:10px 12px;border:1.5px solid #C8C6BE;border-radius:10px;font-size:14px;font-family:inherit;background:#fff;color:#1A1A18;direction:rtl;-webkit-appearance:none}
+.fi:focus{outline:none;border-color:#1A1A18}
+.fl{font-size:12px;color:#555;font-weight:700;display:block;margin-bottom:5px}
+.btn-blk{width:100%;padding:13px;background:#1A1A18;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.step-n{width:26px;height:26px;border-radius:50%;background:#1A1A18;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+/* install banner */
+#install-banner{display:none;position:fixed;bottom:calc(56px + var(--safe-bot) + 10px);left:12px;right:12px;z-index:30;background:#1A1A18;color:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 4px 20px rgba(0,0,0,.35)}
+.canvas-img{display:block;width:100%;height:100%;object-fit:cover}
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="topnav-slot"></div>
+  <div id="screen-slot" class="screen"></div>
+  <div class="tabbar" id="tabbar">
+    <button class="tabitem" id="tab-home" onclick="tabGo('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>בית</span>
+    </button>
+    <button class="tabitem" id="tab-search" onclick="tabGo('search')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>חיפוש</span>
+    </button>
+    <button class="tabitem" id="tab-scan" onclick="tabGo('scan')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <span>מנתח</span>
+    </button>
+    <button class="tabitem" id="tab-add" onclick="tabGo('add')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      <span>הוסף</span>
+    </button>
+    <button class="tabitem" id="tab-profile" onclick="tabGo('profile')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>פרופיל</span>
+    </button>
+  </div>
+</div>
+<div id="install-banner">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:3px">📱 התקן את טעמים</div>
+      <div style="font-size:12px;opacity:.8">הוסף למסך הבית לגישה מהירה</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="installApp()" style="padding:7px 14px;background:#BA7517;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">התקן</button>
+      <button onclick="document.getElementById('install-banner').style.display='none'" style="padding:7px 10px;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">×</button>
+    </div>
+  </div>
+</div>
+<canvas id="offscreen" style="display:none"></canvas>
+<input type="file" id="camInput" accept="image/*" capture="environment" style="display:none" onchange="handleCam(this)">
+
+<script>
+// ═══════════════════════════════════════
+//  STORAGE
+// ═══════════════════════════════════════
+const LS={
+  get(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def}catch{return def}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}},
+};
+
+// ═══════════════════════════════════════
+//  SEED DATA
+// ═══════════════════════════════════════
+const SEED_USERS=[
+  {id:'admin',name:'מנהל מערכת',email:'admin@taamim.co.il',pass:'admin123',role:'admin',created:Date.now()},
+  {id:'u1',name:'שרה כהן',email:'sarah@example.com',pass:'user123',role:'user',created:Date.now()},
+];
+const CH={ramsay:{n:'גורדון רמזי',r:'Savoy Grill',s:3},blumenthal:{n:'הסטון בלומנתל',r:'The Fat Duck',s:3},bottura:{n:'מסימו בוטורה',r:'Osteria Francescana',s:3},adria:{n:'פרן אדריא',r:'elBulli',s:3},nobu:{n:'נובו מטסוהיסה',r:'Nobu London',s:1},pepin:{n:"ז'אק פּפּן",r:'',s:0},child:{n:"ז'וליה צ'יילד",r:'',s:0},ottolenghi:{n:'יותם אוטולנגי',r:'Nopi',s:0},herme:{n:'פייר הרמה',r:'Pierre Hermé',s:0},batali:{n:'מריו בטאלי',r:'Babbo NYC',s:0}};
+const SEED_RECIPES=[
+ {id:'r1',title:'מרק בצל צרפתי',desc:'קרמול בצל ל-60 דקות, ציר בקר עשיר, גרויר מוקרם תחת גריל.',chef:'child',chefName:"ז'וליה צ'יילד",cat:'מרקים',sub:null,diff:1,time:75,quick:false,rating:4.7,ratings:{},rc:234,approved:true,userR:false,
+  steps:['חתכו בצל לטבעות דקות. חממו סיר עם חמאה.','בשלו בצל 45–60 דקות עד ענבר כהה.','הוסיפו יין לבן, גרדו תחתית. בשלו 3 דקות.','הוסיפו ציר, טימין, עלה דפנה. בשלו 20 דקות.','מלאו קעריות. הניחו לחם קלוי ופזרו גרויר.','גריל 3–4 דקות עד הזהבה. הגישו מיד.'],
+  ings:[{n:'בצל צהוב',q:"4 יח'",g:'≈600 גר',cal:160,p:4,c:38,f:0,fb:6,aN:'בצל סגול',aQ:"4 יח'",aC:120,aP:3,aC2:28,aF:0,aFb:5},{n:'חמאה',q:'3 כפות',g:'≈45 גר',cal:300,p:0,c:0,f:34,fb:0,aN:'שמן זית',aQ:'2 כפות',aC:180,aP:0,aC2:0,aF:20,aFb:0},{n:'ציר בקר',q:'1 ליטר',g:'1000 מ"ל',cal:70,p:8,c:4,f:2,fb:0,aN:null},{n:'יין לבן',q:'½ כוס',g:'≈120 מ"ל',cal:80,p:0,c:4,f:0,fb:0,aN:'ציר ירקות',aQ:'½ כוס',aC:10,aP:0,aC2:2,aF:0,aFb:0},{n:'גרויר',q:"100 גר'",g:'100 גר',cal:380,p:28,c:0,f:30,fb:0,aN:'גבינה צהובה',aQ:"70 גר'",aC:250,aP:18,aC2:0,aF:20,aFb:0}]},
+ {id:'r2',title:'סלט ניסואז קלאסי',desc:'סלט פרובנסאלי עם טונה, ביצים קשות, שעועית ירוקה, זיתי קלמטה ווינגרט חרדל.',chef:'pepin',chefName:"ז'אק פּפּן",cat:'סלטים',sub:null,diff:1,time:25,quick:false,rating:4.4,ratings:{},rc:88,approved:true,userR:false,
+  steps:['בשלו ביצים 9 דקות, קררו וחצו.','בשלו שעועית 4 דקות. העבירו לקרח.','הכינו וינגרט: חרדל, חומץ, שום, שמן זית.','סדרו ירקות, טונה, ביצים וזיתים.','שפכו וינגרט והגישו.'],
+  ings:[{n:'שעועית ירוקה',q:"200 גר'",g:'200 גר',cal:40,p:2,c:8,f:0,fb:3,aN:null},{n:'טונה בשמן',q:'1 קופסה',g:'≈160 גר',cal:200,p:28,c:0,f:10,fb:0,aN:'טונה במים',aQ:'1 קופסה',aC:120,aP:26,aC2:0,aF:2,aFb:0},{n:'ביצים קשות',q:"2 יח'",g:'≈120 גר',cal:140,p:12,c:0,f:10,fb:0,aN:null},{n:'זיתי קלמטה',q:"10 יח'",g:'≈50 גר',cal:80,p:0,c:2,f:8,fb:1,aN:null},{n:'שמן זית',q:'3 כפות',g:'≈40 מ"ל',cal:360,p:0,c:0,f:40,fb:0,aN:'חרדל+לימון',aQ:'2 כפות',aC:20,aP:0,aC2:2,aF:0,aFb:0}]},
+ {id:'r3',title:'ברוסקטה עגבניות ובזיל',desc:'לחם סיאבטה קלוי בשום, עגבניות שרי בשלות, בזיל טרי ושמן זית.',chef:'batali',chefName:'מריו בטאלי',cat:'ראשונות',sub:null,diff:1,time:15,quick:true,rating:4.5,ratings:{},rc:156,approved:true,userR:false,
+  steps:['חתכו עגבניות. ערבבו עם שמן, מלח, פלפל ובזיל.','השרו 10 דקות.','קלו לחם 2 דקות מכל צד.','שפשפו בשום חתוך.','ערמו עגבניות מעל והגישו.'],
+  ings:[{n:'לחם סיאבטה',q:'4 פרוסות',g:'≈200 גר',cal:280,p:8,c:52,f:4,fb:2,aN:'לחם מחיטה מלאה',aQ:'4 פרוסות',aC:220,aP:10,aC2:40,aF:3,aFb:6},{n:'עגבניות שרי',q:"200 גר'",g:'200 גר',cal:40,p:2,c:8,f:0,fb:2,aN:null},{n:'שמן זית',q:'2 כפות',g:'≈28 מ"ל',cal:240,p:0,c:0,f:27,fb:0,aN:null},{n:'שום',q:'1 שן',g:'≈5 גר',cal:8,p:0,c:2,f:0,fb:0,aN:null},{n:'בזיל טרי',q:'חופן',g:'≈10 גר',cal:5,p:0,c:1,f:0,fb:0,aN:null}]},
+ {id:'r4',title:'אנטרקוט עם רוטב שמפניה',desc:'אנטרקוט לדרגת מדיום-רייר עם רוטב שמפניה קרמי ושאלוט מקורמל.',chef:'ramsay',chefName:'גורדון רמזי',cat:'עיקריות',sub:'בשר',diff:2,time:45,quick:false,rating:4.8,ratings:{},rc:312,approved:true,userR:false,
+  steps:['הוציאו בשר 30 דק לפני. ייבשו ותבלו.','חממו מחבת ברזל. צרבו 3 דקות מכל צד. הוסיפו חמאה, טימין, שום.','תנור 180° ל-5 דקות. נוח 8 דקות.','טגנו שאלוט. הוסיפו שמפניה, צמצמו 50%.','הוסיפו שמנת. הסמיכו, סננו, זלפו.'],
+  ings:[{n:'אנטרקוט',q:"300 גר'",g:'300 גר',cal:570,p:54,c:0,f:38,fb:0,aN:'חזה עוף',aQ:"300 גר'",aC:240,aP:56,aC2:0,aF:5,aFb:0},{n:'חמאה',q:'3 כפות',g:'≈45 גר',cal:300,p:0,c:0,f:34,fb:0,aN:'שמן זית',aQ:'2 כפות',aC:180,aP:0,aC2:0,aF:20,aFb:0},{n:'שמפניה',q:'1 כוס',g:'≈240 מ"ל',cal:90,p:0,c:4,f:0,fb:0,aN:'מרק עוף',aQ:'1 כוס',aC:15,aP:2,aC2:0,aF:0,aFb:0},{n:'שאלוט',q:"2 יח'",g:'≈60 גר',cal:20,p:0,c:4,f:0,fb:1,aN:null},{n:'שמנת',q:'½ כוס',g:'≈120 מ"ל',cal:200,p:2,c:4,f:20,fb:0,aN:'שמנת דלת שומן',aQ:'½ כוס',aC:80,aP:4,aC2:6,aF:4,aFb:0}]},
+ {id:'r5',title:'עוף בטרגון וורמוט',desc:'חזה עוף עסיסי בורמוט יבש עם טרגון ושמנת.',chef:'blumenthal',chefName:'הסטון בלומנתל',cat:'עיקריות',sub:'עוף',diff:2,time:50,quick:false,rating:4.6,ratings:{},rc:178,approved:true,userR:false,
+  steps:['הכו חזות לעובי אחיד. תבלו.','צרבו 4 דקות מכל צד. הוציאו.','טגנו שאלוט, הוסיפו ורמוט, צמצמו.','הוסיפו שמנת וטרגון. החזירו עוף.','בשלו 12–15 דקות. הוסיפו חמאה לרוטב.'],
+  ings:[{n:'חזה עוף',q:"2 יח'",g:'≈400 גר',cal:340,p:64,c:0,f:8,fb:0,aN:null},{n:'ורמוט',q:'½ כוס',g:'≈120 מ"ל',cal:70,p:0,c:6,f:0,fb:0,aN:'מרק עוף',aQ:'½ כוס',aC:15,aP:1,aC2:0,aF:0,aFb:0},{n:'שמנת',q:'½ כוס',g:'≈120 מ"ל',cal:200,p:2,c:4,f:20,fb:0,aN:'שמנת קוקוס',aQ:'½ כוס',aC:180,aP:2,aC2:6,aF:16,aFb:0},{n:'טרגון טרי',q:'ענף',g:'≈5 גר',cal:5,p:0,c:1,f:0,fb:0,aN:null},{n:'חמאה',q:'כף',g:'≈15 גר',cal:100,p:0,c:0,f:11,fb:0,aN:'שמן זית',aQ:'כף',aC:90,aP:0,aC2:0,aF:10,aFb:0}]},
+ {id:'r6',title:'סלמון צרוב עם שמיר',desc:'פילה סלמון עם קראסט פריך, שמיר טרי, לימון וקייפרס.',chef:'nobu',chefName:'נובו מטסוהיסה',cat:'עיקריות',sub:'דגים',diff:1,time:20,quick:true,rating:4.5,ratings:{},rc:201,approved:true,userR:false,
+  steps:['הוציאו סלמון 15 דקות לפני. ייבשו.','חממו מחבת. צרבו צד-עור 4 דקות. הפכו 2 דקות.','הכינו סלסה: קייפרס, שמיר, גרידת לימון.','הגישו עם הסלסה מעל.'],
+  ings:[{n:'פילה סלמון',q:"200 גר'",g:'200 גר',cal:290,p:40,c:0,f:14,fb:0,aN:'פילה דג בס',aQ:"200 גר'",aC:160,aP:38,aC2:0,aF:4,aFb:0},{n:'שמן זית',q:'כף',g:'≈14 מ"ל',cal:120,p:0,c:0,f:14,fb:0,aN:null},{n:'לימון',q:'½',g:'≈50 גר',cal:15,p:0,c:4,f:0,fb:1,aN:null},{n:'שמיר טרי',q:'חופן',g:'≈10 גר',cal:5,p:0,c:1,f:0,fb:0,aN:null},{n:'קייפרס',q:'כף',g:'≈15 גר',cal:5,p:0,c:1,f:0,fb:0,aN:null}]},
+ {id:'r7',title:"ריזוטו פטריות פורצ'יני",desc:"אורז ארבוריו קרמי עם פטריות פורצ'יני ופרמזן.",chef:'bottura',chefName:'מסימו בוטורה',cat:'עיקריות',sub:'פרווה',diff:2,time:40,quick:false,rating:4.9,ratings:{},rc:445,approved:true,userR:false,
+  steps:["השרו פטריות 20 דקות.",'חממו ציר בנפרד.','טגנו שאלוט בחמאה. הוסיפו אורז 2 דקות.','שפכו יין, ערבבו עד ספיגה.','הוסיפו ציר מצקת-מצקת. הוסיפו פטריות.','סיימו עם חמאה ופרמזן.'],
+  ings:[{n:'אורז ארבוריו',q:"200 גר'",g:'200 גר',cal:320,p:6,c:70,f:1,fb:1,aN:'אורז קמוט',aQ:"200 גר'",aC:280,aP:8,aC2:58,aF:2,aFb:4},{n:"פטריות פורצ'יני",q:"30 גר' יבש",g:'30 גר',cal:80,p:4,c:8,f:0,fb:2,aN:'שמפיניון',aQ:"100 גר'",aC:22,aP:3,aC2:3,aF:0,aFb:1},{n:'חמאה',q:'3 כפות',g:'≈45 גר',cal:300,p:0,c:0,f:34,fb:0,aN:'שמן זית',aQ:'2 כפות',aC:180,aP:0,aC2:0,aF:20,aFb:0},{n:'יין לבן',q:'½ כוס',g:'≈120 מ"ל',cal:80,p:0,c:4,f:0,fb:0,aN:'ציר ירקות',aQ:'½ כוס',aC:10,aP:0,aC2:2,aF:0,aFb:0},{n:'פרמזן',q:"50 גר'",g:'50 גר',cal:200,p:18,c:0,f:14,fb:0,aN:'שמרים תזונתיים',aQ:'3 כפות',aC:45,aP:8,aC2:5,aF:1,aFb:1}]},
+ {id:'r8',title:'טירמיסו קלאסי',desc:'שכבות ביסקוויטי בקפה, מסקרפונה קצפת ואבקת קקאו.',chef:'adria',chefName:'פרן אדריא',cat:'קינוחים',sub:'חלבי',diff:2,time:40,quick:false,rating:4.8,ratings:{},rc:389,approved:true,userR:false,
+  steps:['הקציפו חלמונים עם סוכר על בן-מארי.','הוסיפו מסקרפונה. הקציפו חלבונים, קפלו.','הכינו קפה אספרסו. קררו.','טבלו ביסקוויטים. שכבות.','קרר 4 שעות. פזרו קקאו.'],
+  ings:[{n:'מסקרפונה',q:"250 גר'",g:'250 גר',cal:870,p:8,c:4,f:90,fb:0,aN:'גבינת שמנת דלת שומן',aQ:"250 גר'",aC:350,aP:14,aC2:6,aF:28,aFb:0},{n:'ביצים',q:"3 יח'",g:'≈180 גר',cal:210,p:18,c:0,f:14,fb:0,aN:null},{n:'סוכר',q:"100 גר'",g:'100 גר',cal:400,p:0,c:100,f:0,fb:0,aN:'אריתריטול',aQ:"100 גר'",aC:20,aP:0,aC2:4,aF:0,aFb:0},{n:'ביסקוויטי ספוג',q:"200 גר'",g:'200 גר',cal:700,p:10,c:140,f:10,fb:2,aN:null},{n:'קפה אספרסו',q:'200 מ"ל',g:'200 מ"ל',cal:10,p:0,c:2,f:0,fb:0,aN:null}]},
+ {id:'r9',title:'פונדן שוקולד חם',desc:'עוגה עם ליבה נוזלית — בדיוק 10 דקות אפייה.',chef:'herme',chefName:'פייר הרמה',cat:'קינוחים',sub:'פרווה',diff:3,time:30,quick:false,rating:4.7,ratings:{},rc:267,approved:true,userR:false,
+  steps:['חממו תנור ל-200°. שמנו רמקינים.','המיסו שוקולד וחמאה. קררו.','הקציפו ביצים עם סוכר. שלבו. קפלו קמח.','מלאו ¾ רמקין.','אפו 10–11 דקות בדיוק. הפכו מיד. הגישו עם גלידה.'],
+  ings:[{n:'שוקולד מריר 70%',q:"100 גר'",g:'100 גר',cal:540,p:6,c:30,f:40,fb:8,aN:'שוקולד 85%',aQ:"100 גר'",aC:510,aP:8,aC2:22,aF:42,aFb:10},{n:'חמאה',q:"80 גר'",g:'80 גר',cal:580,p:0,c:0,f:66,fb:0,aN:'חמאת קוקוס',aQ:"80 גר'",aC:560,aP:0,aC2:0,aF:64,aFb:0},{n:'ביצים',q:"2 יח'",g:'≈120 גר',cal:140,p:12,c:0,f:10,fb:0,aN:null},{n:'סוכר',q:"60 גר'",g:'60 גר',cal:240,p:0,c:60,f:0,fb:0,aN:'אריתריטול',aQ:"60 גר'",aC:12,aP:0,aC2:2,aF:0,aFb:0},{n:'קמח',q:"20 גר'",g:'20 גר',cal:70,p:2,c:14,f:0,fb:0,aN:'קמח שקדים',aQ:"20 גר'",aC:80,aP:4,aC2:4,aF:6,aFb:2}]},
+ {id:'r10',title:'שקשוקה ירושלמית',desc:"ביצים ברוטב עגבניות ופלפלים, כמון ופאפריקה מעושנת.",chef:'ottolenghi',chefName:'יותם אוטולנגי',cat:'מהירי הכנה',sub:null,diff:1,time:20,quick:true,rating:4.6,ratings:{},rc:521,approved:true,userR:false,
+  steps:['טגנו בצל 5 דקות. הוסיפו פלפלים 4 דקות.','הוסיפו שום ותבלינים.','שפכו עגבניות. בשלו 8 דקות.','צרו שקעים, שברו ביצה לכל שקע. כסו.','בשלו 5–7 דקות. הגישו עם פיתה.'],
+  ings:[{n:'עגבניות מרוסקות',q:"400 גר'",g:'400 גר',cal:80,p:4,c:16,f:0,fb:4,aN:null},{n:'ביצים',q:"4 יח'",g:'≈240 גר',cal:280,p:24,c:0,f:20,fb:0,aN:null},{n:'שמן זית',q:'2 כפות',g:'≈28 מ"ל',cal:240,p:0,c:0,f:27,fb:0,aN:'שמן קנולה',aQ:'1 כף',aC:90,aP:0,aC2:0,aF:10,aFb:0},{n:'בצל',q:"1 יח'",g:'≈150 גר',cal:40,p:1,c:9,f:0,fb:2,aN:null},{n:'פלפל אדום',q:"1 יח'",g:'≈160 גר',cal:30,p:1,c:6,f:0,fb:2,aN:null}]},
+];
+const CATS_DEF=[
+  {name:'ראשונות',emoji:'🥗',bg:'#3C3489',ft:'#fff',sub:null},
+  {name:'סלטים',emoji:'🥙',bg:'#27500A',ft:'#fff',sub:null},
+  {name:'מרקים',emoji:'🍲',bg:'#0C447C',ft:'#fff',sub:null},
+  {name:'עיקריות',emoji:'🍽',bg:'#633806',ft:'#fff',sub:['עוף','בשר','דגים','פרווה']},
+  {name:'קינוחים',emoji:'🍰',bg:'#72243E',ft:'#fff',sub:['חלבי','פרווה']},
+  {name:'מהירי הכנה',emoji:'⚡',bg:'#085041',ft:'#fff',sub:null},
+];
+const DEMO_PRODS=[{name:'מרק פטריות אסם',carbs100:71,prot100:4,fat100:3},{name:'פתיתים אפויים',carbs100:74,prot100:8,fat100:3},{name:'לחם פרוס',carbs100:48,prot100:8,fat100:3},{name:"קוטג' 3%",carbs100:4,prot100:11,fat100:3},{name:'אורז מבושל',carbs100:28,prot100:3,fat100:0.3},{name:'חזה עוף מבושל',carbs100:0,prot100:31,fat100:3},{name:'בננה',carbs100:20,prot100:1,fat100:0.3},{name:'אבוקדו',carbs100:2,prot100:2,fat100:15}];
+
+// ═══════════════════════════════════════
+//  DB INIT
+// ═══════════════════════════════════════
+function initDB(){
+  if(!LS.get('db_init')){
+    LS.set('users', SEED_USERS);
+    LS.set('recipes', SEED_RECIPES);
+    LS.set('db_init', true);
+    LS.set('db_version', 1);
+  }
+}
+initDB();
+
+function getUsers(){return LS.get('users',[]);}
+function getRecipes(){return LS.get('recipes',[]);}
+function saveRecipes(r){LS.set('recipes',r);}
+function saveUsers(u){LS.set('users',u);}
+function approvedRecipes(){return getRecipes().filter(r=>r.approved);}
+
+// ═══════════════════════════════════════
+//  APP STATE
+// ═══════════════════════════════════════
+let CU=LS.get('current_user',null); // logged in user
+let S={
+  tab:'home', subpg:null, rid:null, cat:null, sub:null,
+  alts:{}, sug:false, stars:0, sv:1, rtab:'ings', lb:false,
+  scan:{name:'',carbs:'',prot:'',fat:'',grams:'100',result:null,demoIdx:-1,img:null,analyzing:false,err:''},
+  sf:{title:'',chefName:CU?.name||'',cat:'ראשונות',sub:'',diff:1,time:30,steps:[''],ings:[{n:'',q:'',g:'',cal:''}]},
+  sfE:'',sfOk:false,
+  search:'', adminTab:'pending',
+};
+
+const DL=['','קל','בינוני','קשה'];
+const calcEx=(c,p,f)=>({carb:Math.round(c/15*10)/10,prot:Math.round(p/7*10)/10,fat:Math.round(f/5*10)/10});
+const iget=(ing,k,i,alts)=>{const use=ing.aN&&alts[i];const m={cal:'cal',p:'p',c:'c',f:'f',fb:'fb'};const a={cal:'aC',p:'aP',c:'aC2',f:'aF',fb:'aFb'};return use?(ing[a[k]]??ing[m[k]]):ing[m[k]];};
+
+// ═══════════════════════════════════════
+//  CANVAS FOOD IMAGES
+// ═══════════════════════════════════════
+const IMG_CACHE={};
+function getFoodImg(id,w,h){
+  const k=`${id}_${w}_${h}`;
+  if(IMG_CACHE[k])return IMG_CACHE[k];
+  const c=document.getElementById('offscreen');
+  if(!c)return'';
+  c.width=w;c.height=h;
+  const ctx=c.getContext('2d');
+  drawFood(ctx,id,w,h);
+  IMG_CACHE[k]=c.toDataURL('image/jpeg',0.88);
+  return IMG_CACHE[k];
+}
+function rnd(a,b){return a+Math.random()*(b-a);}
+function vig(ctx,w,h,s=0.7){const g=ctx.createRadialGradient(w/2,h/2,h*.15,w/2,h/2,h*.9);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,`rgba(0,0,0,${s})`);ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}
+function woodBg(ctx,w,h){const bg=ctx.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#4a2e12');bg.addColorStop(1,'#1e1008');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);for(let i=0;i<14;i++){ctx.beginPath();ctx.moveTo(0,rnd(-h*.1,h*1.1));ctx.bezierCurveTo(w*.3,rnd(-8,8)+i*h/14,w*.7,rnd(-6,6)+i*h/14,w,rnd(-4,4)+i*h/14);ctx.strokeStyle=`rgba(0,0,0,${rnd(.06,.18)})`;ctx.lineWidth=rnd(.5,2);ctx.stroke();}}
+function platePorcelain(ctx,cx,cy,rx,ry){const s=ctx.createRadialGradient(cx,cy+ry*.2,0,cx,cy,rx*1.1);s.addColorStop(0,'rgba(0,0,0,.4)');s.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.scale(1,.3);ctx.beginPath();ctx.arc(cx,(cy+ry*.2)*3.33,rx*1.1,0,Math.PI*2);ctx.fillStyle=s;ctx.fill();ctx.restore();const pg=ctx.createRadialGradient(cx-rx*.2,cy-ry*.25,0,cx,cy,rx*1.05);pg.addColorStop(0,'#f8f4ee');pg.addColorStop(.6,'#ede8e0');pg.addColorStop(1,'#c8c0b0');ctx.beginPath();ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);ctx.fillStyle=pg;ctx.fill();ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=2;ctx.stroke();}
+function drawFood(ctx,id,w,h){
+  const cx=w/2,cy=h/2;
+  const COLORS=['#3C3489','#27500A','#0C447C','#633806','#72243E','#085041'];
+  const bg=ctx.createLinearGradient(0,0,w,h);const bc=COLORS[(parseInt(id.replace('r',''))-1)%COLORS.length];
+  bg.addColorStop(0,bc);bg.addColorStop(1,'#080608');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
+  const EMOJIS={r1:'🍲',r2:'🥗',r3:'🍞',r4:'🥩',r5:'🍗',r6:'🐟',r7:'🍄',r8:'☕',r9:'🍫',r10:'🍳'};
+  const em=EMOJIS[id]||'🍽';
+  woodBg(ctx,w,h);
+  platePorcelain(ctx,cx,cy,w*.38,h*.3);
+  ctx.font=`${h*.28}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(em,cx,cy-h*.02);
+  // subtle sauce pool
+  const sg=ctx.createRadialGradient(cx,cy+h*.06,0,cx,cy+h*.04,w*.3);
+  sg.addColorStop(0,'rgba(200,180,100,.35)');sg.addColorStop(1,'rgba(200,180,100,0)');
+  ctx.beginPath();ctx.ellipse(cx,cy+h*.05,w*.28,h*.16,0,0,Math.PI*2);ctx.fillStyle=sg;ctx.fill();
+  // herb dots
+  for(let i=0;i<8;i++){ctx.beginPath();ctx.arc(cx+rnd(-w*.22,w*.22),cy+rnd(-h*.14,h*.14),rnd(1.5,3),0,Math.PI*2);ctx.fillStyle=`rgba(60,140,40,${rnd(.5,.8)})`;ctx.fill();}
+  vig(ctx,w,h,.72);
+}
+
+// ═══════════════════════════════════════
+//  RENDER ENGINE
+// ═══════════════════════════════════════
+function gi(id,w,h,s=''){return`<img src="${getFoodImg(id,w,h)}" style="width:100%;height:100%;object-fit:cover;${s}">`;}
+function setActive(tab){document.querySelectorAll('.tabitem').forEach(t=>{t.classList.remove('active');});const el=document.getElementById(`tab-${tab}`);if(el)el.classList.add('active');}
+function navTop(back,backFn,mid,right=''){document.getElementById('topnav-slot').innerHTML=`<div class="topnav">${back?`<button class="backbtn" onclick="${backFn}">← ${back}</button>`:`<div class="logo">טע<span>מ</span>ים</div>`}<span style="font-size:13px;font-weight:700;color:#555">${mid||''}</span>${right||'<span></span>'}</div>`;}
+function render(html){document.getElementById('screen-slot').innerHTML=html;document.getElementById('screen-slot').scrollTop=0;}
+
+// ═══════════════════════════════════════
+//  TAB NAVIGATION
+// ═══════════════════════════════════════
+function tabGo(tab,opts={}){
+  S.tab=tab;S.subpg=null;Object.assign(S,opts);
+  setActive(tab);
+  switch(tab){
+    case 'home': showHome();break;
+    case 'search': showSearch();break;
+    case 'scan': showScan();break;
+    case 'add': showAdd();break;
+    case 'profile': showProfile();break;
+  }
+}
+
+// ═══════════════════════════════════════
+//  HOME
+// ═══════════════════════════════════════
+function showHome(){
+  const recs=approvedRecipes();
+  navTop(null,null,null);
+  render(`
+    <div style="padding:14px 14px 8px">
+      <div style="font-size:22px;font-weight:700">מה מבשלים היום?</div>
+      <div style="font-size:12px;color:#888;margin-top:2px">${recs.length} מתכונים · שפי מישלן ומהקהילה</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 14px">
+      ${CATS_DEF.map(c=>{const cnt=recs.filter(r=>r.cat===c.name).length;
+        return`<div onclick="showCat('${c.name}')" style="background:${c.bg};border-radius:14px;padding:16px 8px 13px;cursor:pointer;text-align:center">
+          <div style="font-size:28px;margin-bottom:7px">${c.emoji}</div>
+          <div style="font-size:13px;font-weight:700;color:${c.ft}">${c.name}</div>
+          <div style="font-size:11px;color:${c.ft};opacity:.85;margin-top:3px">${cnt}</div>
+        </div>`;}).join('')}
+    </div>
+    <div style="padding:12px 14px 4px;font-size:14px;font-weight:700">מתכונים מומלצים</div>
+    ${recs.slice(0,5).map(r=>recipeCard(r)).join('')}
+  `);
+}
+
+// ═══════════════════════════════════════
+//  CATEGORY
+// ═══════════════════════════════════════
+function showCat(cat,sub){
+  S.cat=cat;S.sub=sub||null;
+  const ci=CATS_DEF.find(c=>c.name===cat);
+  const hasSub=['עיקריות','קינוחים'].includes(cat);
+  const subList=[...new Set(SEED_RECIPES.filter(r=>r.cat===cat&&r.sub).map(r=>r.sub))];
+  const recs=approvedRecipes().filter(r=>r.cat===cat&&(sub?r.sub===sub:true));
+  navTop('ראשי','tabGo("home")',cat);
+  render(`
+    <div style="background:${ci.bg};padding:14px 16px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:32px">${ci.emoji}</span>
+      <div><div style="font-size:17px;font-weight:700;color:${ci.ft}">${cat}</div><div style="font-size:11px;color:${ci.ft};opacity:.8">${recs.length} מתכונים</div></div>
+    </div>
+    ${hasSub?`<div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid #E0DED6;background:#fff;overflow-x:auto">
+      <button onclick="showCat('${cat}')" style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:2px solid ${!sub?'#1A1A18':'#C8C6BE'};background:${!sub?'#1A1A18':'#fff'};color:${!sub?'#fff':'#555'};white-space:nowrap;font-family:inherit">הכל</button>
+      ${subList.map(s=>`<button onclick="showCat('${cat}','${s}')" style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:2px solid ${sub===s?'#1A1A18':'#C8C6BE'};background:${sub===s?'#1A1A18':'#fff'};color:${sub===s?'#fff':'#555'};white-space:nowrap;font-family:inherit">${s}</button>`).join('')}
+    </div>`:''}
+    ${recs.length===0?`<div style="padding:40px;text-align:center;color:#888">אין מתכונים עדיין</div>`:recs.map(r=>recipeCard(r)).join('')}
+  `);
+}
+
+function recipeCard(r){
+  const ch=CH[r.chef];const nm=r.chefName||(ch?ch.n:'שף אנונימי');const ms=ch&&ch.s>0?'★'.repeat(ch.s):'';
+  const ex=calcEx(r.ings.reduce((s,g)=>s+g.c,0),r.ings.reduce((s,g)=>s+g.p,0),r.ings.reduce((s,g)=>s+g.f,0));
+  return`<div onclick="showRecipe('${r.id}')" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid #F0EEE6;background:#fff;cursor:pointer">
+    <div style="width:66px;height:66px;border-radius:10px;flex-shrink:0;overflow:hidden">${gi(r.id,132,132)}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:700;margin-bottom:2px">${r.title}${r.userR?` <span style="font-size:9px;padding:2px 5px;border-radius:6px;background:#EEEDFE;color:#3C3489;font-weight:700">קהילה</span>`:''}</div>
+      <div style="font-size:11px;color:#666;margin-bottom:4px">${ms?`<span style="color:#BA7517">${ms}</span> · `:''}${nm} · ${r.time} דק'</div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap">
+        <span class="tag" style="background:${['','#EAF3DE','#FAEEDA','#FCEBEB'][r.diff]};color:${['','#27500A','#633806','#791F1F'][r.diff]}">${DL[r.diff]}</span>
+        ${r.quick?`<span class="tag" style="background:#EAF3DE;color:#27500A">מהיר</span>`:''}
+        ${ex.carb>0?`<span class="tag" style="background:#DBEAFE;color:#1e40af">🍞${ex.carb}</span>`:''}
+        ${ex.prot>0?`<span class="tag" style="background:#DCFCE7;color:#166534">🥩${ex.prot}</span>`:''}
+        ${ex.fat>0?`<span class="tag" style="background:#FEF9C3;color:#854d0e">🥑${ex.fat}</span>`:''}
+      </div>
+    </div>
+    <div style="text-align:left;direction:ltr;flex-shrink:0"><div style="color:#BA7517;font-size:12px;font-weight:700">${'★'.repeat(Math.round(r.rating))}</div><div style="font-size:10px;color:#888">${r.rating}</div></div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════
+//  RECIPE DETAIL
+// ═══════════════════════════════════════
+function showRecipe(id){
+  S.rid=id;S.alts={};S.sug=false;S.stars=0;S.sv=1;S.rtab='ings';S.lb=false;
+  _renderRecipe();
+}
+function _renderRecipe(){
+  const r=getRecipes().find(x=>x.id===S.rid);if(!r)return;
+  const ch=CH[r.chef];const nm=r.chefName||(ch?ch.n:'שף אנונימי');
+  const sv=S.sv;
+  const tC=r.ings.reduce((s,g,i)=>s+iget(g,'cal',i,S.alts),0);
+  const tP=r.ings.reduce((s,g,i)=>s+iget(g,'p',i,S.alts),0);
+  const tCa=r.ings.reduce((s,g,i)=>s+iget(g,'c',i,S.alts),0);
+  const tF=r.ings.reduce((s,g,i)=>s+iget(g,'f',i,S.alts),0);
+  const tFb=r.ings.reduce((s,g,i)=>s+iget(g,'fb',i,S.alts),0);
+  const bC=r.ings.reduce((s,g)=>s+g.cal,0);const saved=bC-tC;const mx=Math.max(tP,tCa,tF,tFb,1);
+  const sug=r.ings.filter((g,i)=>g.aN&&!S.alts[i]);
+  const SVOP=[1,2,3,4,6,8];
+  const fmt=(v,s)=>Math.round(v/s);const fmtD=(v,s)=>Math.round(v/s*10)/10;
+  const MAC=[['חלבון',tP,'#185FA5'],['פחמימות',tCa,'#854F0B'],['שומן',tF,'#72243E'],['סיבים',tFb,'#085041']];
+  const ex=calcEx(tCa,tP,tF);const steps=r.steps||[];
+  const curRating=r.ratings&&CU?r.ratings[CU.id]||0:S.stars;
+  navTop(r.cat,`showCat('${r.cat}')`,null);
+  if(S.lb){render(`
+    <div onclick="S.lb=false;_renderRecipe()" style="min-height:450px;overflow:hidden;position:relative">
+      ${gi(r.id,400,450,'height:450px;')}
+      <div style="position:absolute;bottom:0;right:0;left:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:24px 18px 20px">
+        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:5px;text-shadow:0 2px 6px rgba(0,0,0,.6)">${r.title}</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.9);line-height:1.6">${r.desc}</div>
+        ${ch&&ch.s>0?`<div style="margin-top:10px;display:inline-block;padding:4px 12px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:20px;font-size:12px;color:#F9CB42;font-weight:700">${'★'.repeat(ch.s)} ${nm}</div>`:''}
+      </div>
+      <div style="position:absolute;top:16px;right:16px;padding:6px 12px;background:rgba(0,0,0,.5);border-radius:8px;color:#fff;font-size:12px;font-weight:700">× סגור</div>
+    </div>
+  `);return;}
+  render(`
+    <div onclick="S.lb=true;_renderRecipe()" style="cursor:zoom-in;position:relative;height:170px;overflow:hidden">
+      ${gi(r.id,400,170)}
+      <div style="position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.65));pointer-events:none"></div>
+      <div style="position:absolute;bottom:10px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-end">
+        <span style="font-size:11px;color:#fff;background:rgba(0,0,0,.5);padding:4px 10px;border-radius:7px;font-weight:700">🔍 להגדלה</span>
+        ${ch&&ch.s>0?`<span style="font-size:11px;color:#F9CB42;background:rgba(0,0,0,.5);padding:4px 10px;border-radius:7px;font-weight:700">${'★'.repeat(ch.s)} ${nm}</span>`:''}
+      </div>
+    </div>
+    <div style="padding:12px 14px 10px;border-bottom:1px solid #E8E6DE;background:#fff">
+      <div style="font-size:19px;font-weight:700;line-height:1.3;margin-bottom:5px">${r.title}</div>
+      <div style="font-size:12px;color:#555;line-height:1.65;margin-bottom:8px">${r.desc}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <span class="tag" style="background:#F0EEE6;color:#444">${r.cat}${r.sub?' / '+r.sub:''}</span>
+        <span class="tag" style="background:${['','#EAF3DE','#FAEEDA','#FCEBEB'][r.diff]};color:${['','#27500A','#633806','#791F1F'][r.diff]}">${DL[r.diff]}</span>
+        <span class="tag" style="background:#F0EEE6;color:#444">${r.time} דק'</span>
+        ${r.quick?`<span class="tag" style="background:#EAF3DE;color:#27500A">מהיר</span>`:''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 195px;gap:10px;padding:10px 14px;background:#F7F6F2">
+      <div>
+        <div style="display:flex;border:2px solid #E0DED6;border-radius:10px;overflow:hidden;margin-bottom:10px;background:#fff">
+          <button onclick="S.rtab='ings';_renderRecipe()" style="flex:1;padding:9px;font-size:12px;font-weight:700;cursor:pointer;border:none;font-family:inherit;background:${S.rtab==='ings'?'#1A1A18':'#fff'};color:${S.rtab==='ings'?'#fff':'#666'}">🧂 רכיבים</button>
+          <button onclick="S.rtab='steps';_renderRecipe()" style="flex:1;padding:9px;font-size:12px;font-weight:700;cursor:pointer;border:none;font-family:inherit;background:${S.rtab==='steps'?'#1A1A18':'#fff'};color:${S.rtab==='steps'?'#fff':'#666'}">👨‍🍳 הכנה</button>
+        </div>
+        ${S.rtab==='ings'?`<div style="background:#fff;border-radius:10px;border:1px solid #E8E6DE;padding:12px">
+          ${r.ings.map((g,i)=>{const use=g.aN&&S.alts[i];return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #F0EEE6">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600">${use?g.aN:g.n}</div>
+              <div style="font-size:10px;color:#888;margin-top:1px">
+                <span style="background:#F0EEE6;padding:1px 5px;border-radius:5px;font-weight:600">${use?g.aQ:g.q}</span>
+                ${g.g?`<span style="margin-right:4px;color:#AAA">${g.g}</span>`:''}
+                · ${iget(g,'cal',i,S.alts)} קל'${sv>1?` (${fmt(iget(g,'cal',i,S.alts),sv)} למנה)`:''}
+              </div>
+            </div>
+            ${g.aN?`<button onclick="S.alts[${i}]=!S.alts[${i}];_renderRecipe()" style="font-size:11px;padding:4px 8px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;border:2px solid ${use?'#3B6D11':'#C8C6BE'};background:${use?'#EAF3DE':'#fff'};color:${use?'#27500A':'#555'};flex-shrink:0">${use?'✓':'חלופה'}</button>`:'<span style="width:50px;flex-shrink:0"></span>'}
+          </div>`;}).join('')}
+        </div>`:`<div style="background:#fff;border-radius:10px;border:1px solid #E8E6DE;padding:13px">
+          ${steps.map((st,i)=>`<div style="display:flex;gap:10px;margin-bottom:${i<steps.length-1?'13px':'0'}"><div class="step-n">${i+1}</div><div style="font-size:13px;color:#1A1A18;line-height:1.65;padding-top:3px">${st}</div></div>`).join('')}
+        </div>`}
+      </div>
+      <div>
+        <div style="background:#fff;border:1px solid #E8E6DE;border-radius:10px;padding:12px">
+          <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px">מנות</div>
+          <div style="display:flex;gap:3px;margin-bottom:10px;flex-wrap:wrap">
+            ${SVOP.map(n=>`<button onclick="S.sv=${n};_renderRecipe()" style="flex:1;min-width:18px;padding:5px 1px;font-size:11px;font-weight:700;border-radius:6px;cursor:pointer;font-family:inherit;border:2px solid ${n===sv?'#1A1A18':'#C8C6BE'};background:${n===sv?'#1A1A18':'#fff'};color:${n===sv?'#fff':'#555'}">${n}</button>`).join('')}
+          </div>
+          <div style="background:#F8F7F2;border-radius:8px;padding:10px;margin-bottom:8px;text-align:center">
+            <div style="font-size:10px;color:#666;font-weight:700">${sv>1?`לכל מנה (${sv})`:'סה"כ'}</div>
+            <div style="font-size:30px;font-weight:700;direction:ltr;line-height:1.1;margin:3px 0">${fmt(tC,sv)}</div>
+            <div style="font-size:10px;color:#888;font-weight:600">קק"ל</div>
+            ${sv>1?`<div style="font-size:10px;color:#555;margin-top:4px;padding-top:4px;border-top:1px solid #E8E6DE">סה"כ: <strong>${tC}</strong></div>`:''}
+            ${saved>0?`<div style="font-size:10px;color:#27500A;background:#EAF3DE;padding:2px 6px;border-radius:8px;margin-top:3px;display:inline-block;direction:ltr;font-weight:700">–${fmt(saved,sv)} קל'</div>`:''}
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;font-weight:700;color:#555;margin-bottom:5px">אבות מזון${sv>1?' / מנה':''}</div>
+            ${MAC.map(([l,v,col])=>`<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
+              <span style="font-size:10px;color:#444;min-width:46px;text-align:right;font-weight:700">${l}</span>
+              <div style="flex:1;height:5px;background:#F0EEE6;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(v/mx*100)}%;background:${col};border-radius:3px;transition:width .3s"></div></div>
+              <span style="font-size:10px;color:#333;min-width:34px;text-align:left;direction:ltr;font-weight:700">${fmt(v,sv)}ג'</span>
+            </div>`).join('')}
+          </div>
+          <div style="background:linear-gradient(135deg,#F0F9FF,#ECFDF5);border-radius:8px;padding:9px;margin-bottom:8px">
+            <div style="font-size:10px;font-weight:700;color:#555;margin-bottom:5px">מנות חלפין${sv>1?' / מנה':''}</div>
+            ${tCa>0?`<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px;font-weight:700;color:#1e40af">🍞 פחמימה</span><span style="font-size:14px;font-weight:700;color:#1e40af;background:#DBEAFE;padding:1px 7px;border-radius:8px;direction:ltr">${fmtD(ex.carb,sv)}</span></div>`:''}
+            ${tP>0?`<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px;font-weight:700;color:#166534">🥩 חלבון</span><span style="font-size:14px;font-weight:700;color:#166534;background:#DCFCE7;padding:1px 7px;border-radius:8px;direction:ltr">${fmtD(ex.prot,sv)}</span></div>`:''}
+            ${tF>0?`<div style="display:flex;justify-content:space-between"><span style="font-size:11px;font-weight:700;color:#854d0e">🥑 שומן</span><span style="font-size:14px;font-weight:700;color:#854d0e;background:#FEF9C3;padding:1px 7px;border-radius:8px;direction:ltr">${fmtD(ex.fat,sv)}</span></div>`:''}
+          </div>
+          <button onclick="S.sug=!S.sug;_renderRecipe()" style="width:100%;padding:6px;font-size:11px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;border:2px solid ${S.sug?'#3B6D11':'#C8C6BE'};background:${S.sug?'#EAF3DE':'#fff'};color:${S.sug?'#27500A':'#555'}">${S.sug?'▲ סגור':'▼ חלופות'}</button>
+          ${S.sug?`<div style="margin-top:7px">${sug.length?sug.map(g=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #F0EEE6"><div><div style="font-size:11px;font-weight:700">${g.aN}</div><div style="font-size:9px;color:#888">במקום ${g.n}</div></div><span style="font-size:10px;color:#27500A;background:#EAF3DE;padding:2px 6px;border-radius:7px;direction:ltr;font-weight:700">–${g.cal-g.aC}</span></div>`).join(''):`<div style="font-size:11px;color:#888;padding:3px 0">כל החלופות מופעלות ✓</div>`}</div>`:''}
+          <div style="font-size:9px;color:#AAA;margin-top:6px">Claude AI · מתעדכן בזמן אמת</div>
+        </div>
+        <div style="margin-top:8px;background:#fff;border:1px solid #E8E6DE;border-radius:10px;padding:10px">
+          <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:2px">דרג</div>
+          <div style="font-size:10px;color:#888;margin-bottom:5px">${r.rc} דירוגים · ${r.rating}</div>
+          <div style="display:flex;direction:ltr;gap:1px">
+            ${[1,2,3,4,5].map(n=>`<button onclick="rateRecipe('${r.id}',${n})" style="background:none;border:none;font-size:26px;cursor:pointer;color:${n<=curRating?'#BA7517':'#DDD'};padding:0 1px;line-height:1">★</button>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function rateRecipe(id,stars){
+  if(!CU){alert('יש להתחבר כדי לדרג');return;}
+  const recs=getRecipes();
+  const r=recs.find(x=>x.id===id);if(!r)return;
+  if(!r.ratings)r.ratings={};
+  r.ratings[CU.id]=stars;
+  const vals=Object.values(r.ratings);
+  r.rating=Math.round(vals.reduce((s,v)=>s+v,0)/vals.length*10)/10;
+  r.rc=vals.length;
+  saveRecipes(recs);
+  S.stars=stars;_renderRecipe();
+}
+
+// ═══════════════════════════════════════
+//  SEARCH
+// ═══════════════════════════════════════
+function showSearch(){
+  navTop(null,null,'חיפוש');
+  const q=S.search||'';
+  const recs=q.length>1?approvedRecipes().filter(r=>r.title.includes(q)||r.chefName?.includes(q)||r.desc?.includes(q)):[];
+  render(`
+    <div style="padding:12px 14px">
+      <input class="fi" type="search" placeholder="חפש מתכון, שף, רכיב..." value="${q}" oninput="S.search=this.value;showSearch()" style="font-size:15px;padding:12px 14px">
+    </div>
+    ${q.length<2?`<div style="padding:20px;text-align:center;color:#888;font-size:13px">הקלד לחיפוש...</div>`
+    :recs.length===0?`<div style="padding:20px;text-align:center;color:#888;font-size:13px">לא נמצאו תוצאות</div>`
+    :recs.map(r=>recipeCard(r)).join('')}
+  `);
+}
+
+// ═══════════════════════════════════════
+//  SCAN
+// ═══════════════════════════════════════
+function showScan(){
+  const sc=S.scan;const r=sc.result;
+  navTop(null,null,'מנתח אריזות');
+  render(`
+    <div style="padding:14px">
+      <div style="border:2.5px dashed #C8C6BE;border-radius:14px;padding:20px;text-align:center;cursor:pointer;background:#FAFAF8" onclick="document.getElementById('camInput').click()" style>
+        ${sc.analyzing?`<div style="font-size:26px;margin-bottom:8px">⏳</div><div style="font-size:14px;font-weight:700;color:#085041">מנתח עם Claude AI...</div>`:
+        sc.img?`<img src="${sc.img}" style="max-height:120px;max-width:100%;border-radius:8px;object-fit:contain;margin-bottom:8px"><div style="font-size:12px;color:#085041;font-weight:700">📷 לחץ לצילום מחדש</div>`:
+        `<div style="font-size:38px;margin-bottom:10px">📷</div><div style="font-size:15px;font-weight:700;color:#085041">צלם תווית מוצר</div><div style="font-size:12px;color:#666;margin-top:4px">Claude יקרא ערכים אוטומטית</div><div style="margin-top:10px;padding:7px 16px;background:#085041;color:#fff;border-radius:8px;font-size:13px;font-weight:700;display:inline-block">פתח מצלמה</div>`}
+      </div>
+      ${sc.err?`<div style="background:#FCEBEB;color:#791F1F;font-size:12px;font-weight:700;padding:10px;border-radius:8px;margin-top:10px">${sc.err}</div>`:''}
+      <div style="margin-top:12px">
+        <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px">דוגמאות מהירות:</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">${DEMO_PRODS.map((d,i)=>`<button onclick="loadDemoProd(${i})" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${sc.demoIdx===i?'#085041':'#C8C6BE'};background:${sc.demoIdx===i?'#EAF3DE':'#fff'};color:${sc.demoIdx===i?'#085041':'#444'}">${d.name}</button>`).join('')}</div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div style="margin-bottom:10px"><label class="fl">שם המוצר</label><input class="fi" placeholder="שם..." value="${sc.name}" oninput="S.scan.name=this.value"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+          <div><label class="fl">🍞 פחמימות/100</label><input class="fi" type="number" inputmode="decimal" placeholder="71" value="${sc.carbs}" oninput="S.scan.carbs=this.value;S.scan.result=null"></div>
+          <div><label class="fl">🥩 חלבון/100</label><input class="fi" type="number" inputmode="decimal" placeholder="4" value="${sc.prot}" oninput="S.scan.prot=this.value;S.scan.result=null"></div>
+          <div><label class="fl">🥑 שומן/100</label><input class="fi" type="number" inputmode="decimal" placeholder="3" value="${sc.fat}" oninput="S.scan.fat=this.value;S.scan.result=null"></div>
+        </div>
+        <div style="margin-bottom:14px"><label class="fl">כמות שאכלת (גרם)</label><input class="fi" type="number" inputmode="numeric" placeholder="100" value="${sc.grams}" oninput="S.scan.grams=this.value;S.scan.result=null"></div>
+        <button onclick="doScanCalc()" class="btn-blk">חשב מנות חלפין</button>
+      </div>
+      ${r?`<div class="card" style="margin-top:12px;border:2px solid #085041">
+        <div style="font-size:15px;font-weight:700;margin-bottom:1px">${sc.name||'תוצאה'}</div>
+        <div style="font-size:11px;color:#666;margin-bottom:12px">${r.g} גרם · ${r.tCal} קלוריות</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+          <div style="background:#DBEAFE;border-radius:10px;padding:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#1e40af">${r.ex.carb}</div><div style="font-size:10px;font-weight:700;color:#1e40af">🍞 פחמימה</div><div style="font-size:9px;color:#3b82f6">${r.tC}ג'</div></div>
+          <div style="background:#DCFCE7;border-radius:10px;padding:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534">${r.ex.prot}</div><div style="font-size:10px;font-weight:700;color:#166534">🥩 חלבון</div><div style="font-size:9px;color:#22c55e">${r.tP}ג'</div></div>
+          <div style="background:#FEF9C3;border-radius:10px;padding:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#854d0e">${r.ex.fat}</div><div style="font-size:10px;font-weight:700;color:#854d0e">🥑 שומן</div><div style="font-size:9px;color:#ca8a04">${r.tF}ג'</div></div>
+        </div>
+        <div style="background:#F8F7F2;border-radius:8px;padding:10px">
+          <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:7px">כמה גרם = מנה אחת?</div>
+          ${r.portionC?`<div style="display:flex;gap:8px;margin-bottom:4px"><span>🍞</span><span style="font-size:12px;color:#444">מנת פחמימה = <strong>${r.portionC} גרם</strong></span></div>`:''}
+          ${r.portionP?`<div style="display:flex;gap:8px;margin-bottom:4px"><span>🥩</span><span style="font-size:12px;color:#444">מנת חלבון = <strong>${r.portionP} גרם</strong></span></div>`:''}
+          ${r.portionF?`<div style="display:flex;gap:8px"><span>🥑</span><span style="font-size:12px;color:#444">מנת שומן = <strong>${r.portionF} גרם</strong></span></div>`:''}
+        </div>
+      </div>`:''}
+    </div>
+  `);
+}
+function loadDemoProd(i){const d=DEMO_PRODS[i];S.scan={...S.scan,name:d.name,carbs:d.carbs100,prot:d.prot100,fat:d.fat100,demoIdx:i,result:null,img:null,err:''};showScan();}
+function doScanCalc(){
+  const sc=S.scan;const c=parseFloat(sc.carbs)||0,p=parseFloat(sc.prot)||0,f=parseFloat(sc.fat)||0,g=parseFloat(sc.grams)||100;
+  const fc=g/100;const tC=Math.round(c*fc*10)/10,tP=Math.round(p*fc*10)/10,tF=Math.round(f*fc*10)/10;
+  S.scan.result={g,tC,tP,tF,tCal:Math.round(tC*4+tP*4+tF*9),ex:calcEx(tC,tP,tF),portionC:c>0?Math.round(1500/c):null,portionP:p>0?Math.round(700/p):null,portionF:f>0?Math.round(500/f):null};
+  showScan();
+}
+async function handleCam(inp){
+  const file=inp.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    S.scan.img=e.target.result;S.scan.analyzing=true;S.scan.err='';S.scan.result=null;showScan();
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,
+          messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:e.target.result.split(',')[1]}},
+          {type:'text',text:'חלץ ערכים תזונתיים ל-100 גרם. JSON בלבד: {"name":"...","carbs":0,"protein":0,"fat":0}'}]}]})});
+      const data=await res.json();
+      const parsed=JSON.parse(data.content?.map(x=>x.text||'').join('').replace(/```json|```/g,'').trim());
+      S.scan.name=parsed.name||'מוצר מצולם';S.scan.carbs=parsed.carbs||'';S.scan.prot=parsed.protein||'';S.scan.fat=parsed.fat||'';
+      S.scan.analyzing=false;doScanCalc();
+    }catch(e){S.scan.analyzing=false;S.scan.err='לא הצלחתי לקרוא. נסה שוב בצילום מוארת, או הכנס ידנית.';showScan();}
+  };reader.readAsDataURL(file);
+}
+
+// ═══════════════════════════════════════
+//  ADD RECIPE
+// ═══════════════════════════════════════
+function showAdd(){
+  if(!CU){navTop(null,null,'הוסף מתכון');render(`<div style="padding:40px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🔐</div><div style="font-size:16px;font-weight:700;margin-bottom:8px">יש להתחבר</div><div style="font-size:13px;color:#666;margin-bottom:20px">כדי להוסיף מתכון, יש להתחבר תחילה</div><button class="btn-blk" style="max-width:200px;margin:0 auto;display:block" onclick="tabGo('profile')">כניסה / הרשמה</button></div>`);return;}
+  const f=S.sf;
+  const CL=['ראשונות','סלטים','מרקים','עיקריות','קינוחים','מהירי הכנה'];
+  const SM={'עיקריות':['עוף','בשר','דגים','פרווה'],'קינוחים':['חלבי','פרווה']};const ns=SM[f.cat];
+  navTop(null,null,'הוספת מתכון');
+  if(S.sfOk){render(`<div style="padding:52px 16px;text-align:center"><div style="font-size:52px;margin-bottom:14px">🎉</div><div style="font-size:18px;font-weight:700;margin-bottom:6px">המתכון הוגש!</div><div style="font-size:13px;color:#666;margin-bottom:24px">מנהל המערכת יאשר אותו בקרוב</div><button class="btn-blk" onclick="S.sfOk=false;S.sf={title:'',chefName:CU?.name||'',cat:'ראשונות',sub:'',diff:1,time:30,steps:[''],ings:[{n:'',q:'',g:'',cal:''}]};showAdd()">הוסף מתכון נוסף</button><button onclick="tabGo('home')" style="margin-top:10px;width:100%;padding:13px;background:transparent;color:#1A1A18;border:2px solid #C8C6BE;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">חזרה לדף הבית</button></div>`);return;}
+  render(`
+    <div style="padding:12px 14px 20px">
+      <div style="margin-bottom:10px"><label class="fl">שם המתכון *</label><input class="fi" placeholder="למשל: קרם ברולה" value="${f.title}" oninput="S.sf.title=this.value"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div><label class="fl">שף / מגיש</label><input class="fi" placeholder="שמך" value="${f.chefName}" oninput="S.sf.chefName=this.value"></div>
+        <div><label class="fl">קטגוריה *</label><select class="fi" onchange="S.sf.cat=this.value;S.sf.sub='';showAdd()">${CL.map(c=>`<option${c===f.cat?' selected':''}>${c}</option>`).join('')}</select></div>
+      </div>
+      ${ns?`<div style="margin-bottom:10px"><label class="fl">תת-קטגוריה</label><select class="fi" onchange="S.sf.sub=this.value"><option value="">בחר...</option>${ns.map(s=>`<option${s===f.sub?' selected':''}>${s}</option>`).join('')}</select></div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div><label class="fl">קושי</label><select class="fi" onchange="S.sf.diff=+this.value">${[1,2,3].map(d=>`<option value="${d}"${f.diff===d?' selected':''}>${DL[d]}</option>`).join('')}</select></div>
+        <div><label class="fl">זמן (דק')</label><input class="fi" type="number" inputmode="numeric" min="5" value="${f.time}" oninput="S.sf.time=+this.value"></div>
+      </div>
+      <div style="margin-bottom:10px"><label class="fl">תיאור קצר</label><input class="fi" placeholder="כמה מילים..." value="${f.desc||''}" oninput="S.sf.desc=this.value"></div>
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label class="fl" style="margin:0">👨‍🍳 שלבי הכנה</label>
+          <button onclick="S.sf.steps.push('');showAdd()" style="padding:5px 12px;background:#085041;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ שלב</button>
+        </div>
+        <div style="background:#fff;border-radius:8px;border:1.5px solid #E0DED6;padding:10px">
+          ${f.steps.map((st,i)=>`<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start">
+            <div class="step-n">${i+1}</div>
+            <input class="fi" placeholder="תאר את השלב..." value="${st}" oninput="S.sf.steps[${i}]=this.value" style="padding:8px 10px;font-size:13px">
+            ${i>0?`<button onclick="S.sf.steps.splice(${i},1);showAdd()" style="background:none;border:none;cursor:pointer;color:#AAA;font-size:20px;font-weight:700;padding-top:4px">×</button>`:'<span style="width:22px"></span>'}
+          </div>`).join('')}
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label class="fl" style="margin:0">🧂 רכיבים * (לפחות 2)</label>
+          <button onclick="S.sf.ings.push({n:'',q:'',g:'',cal:''});showAdd()" style="padding:5px 12px;background:#3C3489;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ רכיב</button>
+        </div>
+        <div style="background:#fff;border-radius:8px;border:1.5px solid #E0DED6;padding:10px">
+          <div style="display:grid;grid-template-columns:1fr 70px 55px 50px 22px;gap:4px;margin-bottom:6px">
+            ${['שם','כמות','גרם',"קל'",''].map(h=>`<span style="font-size:11px;color:#888;font-weight:700">${h}</span>`).join('')}
+          </div>
+          ${f.ings.map((g,i)=>`<div style="display:grid;grid-template-columns:1fr 70px 55px 50px 22px;gap:4px;margin-bottom:6px;align-items:center">
+            <input class="fi" placeholder="שם" value="${g.n}" oninput="S.sf.ings[${i}].n=this.value" style="padding:7px 8px;font-size:12px">
+            <input class="fi" placeholder="1 כוס" value="${g.q}" oninput="S.sf.ings[${i}].q=this.value" style="padding:7px 8px;font-size:12px">
+            <input class="fi" placeholder="240" value="${g.g}" oninput="S.sf.ings[${i}].g=this.value" style="padding:7px 8px;font-size:12px">
+            <input class="fi" type="number" inputmode="numeric" placeholder="0" value="${g.cal}" oninput="S.sf.ings[${i}].cal=+this.value" style="padding:7px 8px;font-size:12px">
+            ${i>0?`<button onclick="S.sf.ings.splice(${i},1);showAdd()" style="background:none;border:none;cursor:pointer;color:#AAA;font-size:20px;font-weight:700;line-height:1">×</button>`:'<span></span>'}
+          </div>`).join('')}
+        </div>
+      </div>
+      ${S.sfE?`<div style="background:#FCEBEB;color:#791F1F;font-size:13px;font-weight:700;padding:10px;border-radius:8px;margin-bottom:10px">${S.sfE}</div>`:''}
+      <button onclick="doSubmit()" class="btn-blk">הגש מתכון לאישור</button>
+    </div>
+  `);
+}
+function doSubmit(){
+  const f=S.sf;S.sfE='';
+  if(!f.title.trim()){S.sfE='נא להזין שם מתכון';showAdd();return;}
+  const fi=f.ings.filter(g=>g.n.trim());
+  if(fi.length<2){S.sfE='נא להוסיף לפחות 2 רכיבים';showAdd();return;}
+  const recs=getRecipes();
+  if(recs.find(r=>r.title.trim().toLowerCase()===f.title.trim().toLowerCase())){S.sfE=`"${f.title.trim()}" כבר קיים`;showAdd();return;}
+  const newR={
+    id:'r'+Date.now(),title:f.title.trim(),chefName:f.chefName||CU.name||'שף אנונימי',chef:null,
+    desc:f.desc||'מתכון קהילתי.',cat:f.cat,sub:f.sub||null,diff:f.diff,time:f.time,quick:f.time<=25,
+    rating:0,ratings:{},rc:0,approved:false,userR:true,submittedBy:CU.id,submittedAt:Date.now(),
+    steps:f.steps.filter(s=>s.trim()),
+    ings:fi.map(g=>({n:g.n,q:g.q,g:g.g||'',cal:+g.cal||0,p:0,c:0,f:0,fb:0,aN:null}))
+  };
+  recs.push(newR);saveRecipes(recs);
+  S.sfOk=true;showAdd();
+}
+
+// ═══════════════════════════════════════
+//  PROFILE
+// ═══════════════════════════════════════
+function showProfile(){
+  navTop(null,null,'פרופיל');
+  if(!CU){render(`
+    <div style="padding:40px 20px">
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="font-size:56px;margin-bottom:12px">👤</div>
+        <div style="font-size:20px;font-weight:700">ברוך הבא לטעמים</div>
+        <div style="font-size:13px;color:#666;margin-top:6px">התחבר כדי לדרג, להגיש מתכונים ולנהל</div>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:10px"><label class="fl">אימייל</label><input class="fi" id="li-email" type="email" inputmode="email" placeholder="you@example.com"></div>
+        <div style="margin-bottom:14px"><label class="fl">סיסמה</label><input class="fi" id="li-pass" type="password" placeholder="••••••••"></div>
+        <div id="li-err" style="color:#c0392b;font-size:12px;margin-bottom:8px;display:none"></div>
+        <button onclick="doLogin()" class="btn-blk">כניסה</button>
+      </div>
+      <div style="margin-top:12px;text-align:center;font-size:12px;color:#888">
+        <div style="margin-bottom:4px;font-weight:700">חשבונות לבדיקה:</div>
+        <div>Admin: admin@taamim.co.il / admin123</div>
+        <div style="margin-top:2px">משתמש: sarah@example.com / user123</div>
+      </div>
+    </div>
+  `);return;}
+  const myRecs=getRecipes().filter(r=>r.submittedBy===CU.id);
+  const pendRecs=getRecipes().filter(r=>!r.approved);
+  render(`
+    <div style="padding:16px 14px">
+      <div class="card" style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="width:52px;height:52px;border-radius:50%;background:#DBEAFE;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#1e40af;flex-shrink:0">${CU.name.charAt(0)}</div>
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:700">${CU.name}</div>
+          <div style="font-size:12px;color:#666">${CU.email}</div>
+          ${CU.role==='admin'?`<div style="display:inline-block;padding:2px 8px;border-radius:6px;background:#EEEDFE;color:#3C3489;font-size:11px;font-weight:700;margin-top:3px">מנהל מערכת</div>`:''}
+        </div>
+        <button onclick="doLogout()" style="padding:6px 12px;background:#fff;border:2px solid #C8C6BE;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#555">יציאה</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div style="background:#fff;border:1px solid #E0DED6;border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:28px;font-weight:700">${myRecs.length}</div>
+          <div style="font-size:12px;color:#666">מתכונים שלי</div>
+        </div>
+        <div style="background:#fff;border:1px solid #E0DED6;border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:28px;font-weight:700">${myRecs.filter(r=>r.approved).length}</div>
+          <div style="font-size:12px;color:#666">אושרו</div>
+        </div>
+      </div>
+      ${CU.role==='admin'?adminPanel(pendRecs):''}
+      ${myRecs.length>0?`<div style="font-size:14px;font-weight:700;margin-bottom:10px;margin-top:4px">המתכונים שלי</div>
+      ${myRecs.map(r=>`<div style="background:#fff;border:1px solid #E0DED6;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+        <div><div style="font-size:13px;font-weight:700">${r.title}</div><div style="font-size:11px;color:#888;margin-top:2px">${r.approved?'✅ מאושר':'⏳ ממתין לאישור'}</div></div>
+        ${r.approved?`<button onclick="showRecipe('${r.id}')" style="padding:5px 10px;background:#1A1A18;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">צפה</button>`:''}
+      </div>`).join('')}`:''}
+    </div>
+  `);
+}
+
+function adminPanel(pendRecs){
+  return`<div style="background:#EEEDFE;border:2px solid #7F77DD;border-radius:12px;padding:14px;margin-bottom:14px">
+    <div style="font-size:15px;font-weight:700;color:#3C3489;margin-bottom:12px">🛡 פאנל ניהול</div>
+    ${pendRecs.length===0?`<div style="font-size:13px;color:#666">אין מתכונים ממתינים לאישור</div>`:`
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">ממתינים לאישור (${pendRecs.length})</div>
+    ${pendRecs.map(r=>`<div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:2px">${r.title}</div>
+      <div style="font-size:11px;color:#666;margin-bottom:8px">מוגש על ידי: ${r.chefName} · ${r.cat}${r.sub?' / '+r.sub:''}</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="approveRecipe('${r.id}',true)" style="flex:1;padding:8px;background:#27500A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✓ אישור</button>
+        <button onclick="approveRecipe('${r.id}',false)" style="flex:1;padding:8px;background:#791F1F;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✗ דחייה</button>
+      </div>
+    </div>`).join('')}`}
+    <div style="margin-top:12px;border-top:1px solid rgba(63,52,137,.2);padding-top:12px">
+      <div style="font-size:13px;font-weight:700;color:#3C3489;margin-bottom:8px">ניהול משתמשים</div>
+      ${getUsers().map(u=>`<div style="background:#fff;border-radius:8px;padding:10px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:13px;font-weight:700">${u.name}</div>
+          <div style="font-size:11px;color:#666">${u.email} · <span style="color:${u.role==='admin'?'#3C3489':'#555'};font-weight:600">${u.role==='admin'?'מנהל':'משתמש'}</span></div>
+        </div>
+        ${u.id!=='admin'?`<button onclick="deleteUser('${u.id}')" style="padding:5px 10px;background:#FCEBEB;color:#791F1F;border:1px solid #F7C1C1;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">מחק</button>`:'<span style="font-size:10px;color:#888">ראשי</span>'}
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function approveRecipe(id,approve){
+  const recs=getRecipes();const r=recs.find(x=>x.id===id);if(!r)return;
+  if(approve){r.approved=true;saveRecipes(recs);alert(`✅ "${r.title}" אושר`);}
+  else{const i=recs.indexOf(r);recs.splice(i,1);saveRecipes(recs);alert(`✗ "${r.title}" נדחה ונמחק`);}
+  showProfile();
+}
+function deleteUser(id){
+  if(!confirm('למחוק משתמש זה?'))return;
+  const users=getUsers().filter(u=>u.id!==id);saveUsers(users);showProfile();
+}
+function doLogin(){
+  const email=document.getElementById('li-email').value.trim();
+  const pass=document.getElementById('li-pass').value;
+  const user=getUsers().find(u=>u.email===email&&u.pass===pass);
+  const errEl=document.getElementById('li-err');
+  if(!user){errEl.style.display='block';errEl.textContent='אימייל או סיסמה שגויים';return;}
+  CU=user;LS.set('current_user',CU);showProfile();
+}
+function doLogout(){CU=null;LS.set('current_user',null);showProfile();}
+
+// ═══════════════════════════════════════
+//  PWA INSTALL
+// ═══════════════════════════════════════
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();deferredPrompt=e;
+  document.getElementById('install-banner').style.display='block';
+});
+function installApp(){if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;document.getElementById('install-banner').style.display='none';});}}
+window.addEventListener('appinstalled',()=>{document.getElementById('install-banner').style.display='none';});
+
+// ═══════════════════════════════════════
+//  SERVICE WORKER
+// ═══════════════════════════════════════
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').then(r=>console.log('SW registered')).catch(e=>console.log('SW failed',e));});
+}
+
+// ═══════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════
+setActive('home');
+showHome();
+</script>
+</body>
+</html>
