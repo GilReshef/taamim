@@ -16,7 +16,7 @@
 :root{--sb:env(safe-area-inset-bottom,0px);--st:env(safe-area-inset-top,0px)}
 html,body{height:100%;overflow:hidden;background:#F7F6F2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 #root{height:100%;display:flex;flex-direction:column;direction:rtl;color:#1A1A18;padding-top:var(--st)}
-.scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#F7F6F2;padding-bottom:calc(60px + var(--sb))}
+.scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#F7F6F2;padding-bottom:calc(62px + var(--sb))}
 .tnav{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1.5px solid #E0DED6;display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:52px;flex-shrink:0}
 .logo{font-size:20px;font-weight:700;color:#1A1A18;letter-spacing:-.5px}.logo span{color:#BA7517}
 .bb{display:flex;align-items:center;gap:6px;padding:8px 14px;background:#1A1A18;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
@@ -31,7 +31,16 @@ html,body{height:100%;overflow:hidden;background:#F7F6F2;font-family:-apple-syst
 .fi:focus{outline:none;border-color:#1A1A18}
 .fl{font-size:12px;color:#555;font-weight:700;display:block;margin-bottom:5px}
 .btn{width:100%;padding:13px;background:#1A1A18;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn:active{opacity:.85}
 .sn{width:26px;height:26px;border-radius:50%;background:#1A1A18;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+/* recipe preview card for search results */
+.rp-card{background:#fff;border:1.5px solid #E0DED6;border-radius:14px;margin:0 14px 12px;overflow:hidden}
+.rp-header{padding:14px 14px 10px}
+.rp-actions{display:flex;gap:8px;padding:0 14px 14px}
+.rp-btn-add{flex:1;padding:11px;background:#27500A;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.rp-btn-skip{padding:11px 14px;background:#fff;color:#555;border:2px solid #C8C6BE;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+/* OCR progress */
+.ocr-bar{background:#F0F9FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:12px 14px}
 </style>
 </head>
 <body>
@@ -49,7 +58,7 @@ html,body{height:100%;overflow:hidden;background:#F7F6F2;font-family:-apple-syst
     </button>
     <button class="ti" id="t-scan" onclick="gTab('scan')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      <span>מנתח</span>
+      <span>סורק</span>
     </button>
     <button class="ti" id="t-add" onclick="gTab('add')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
@@ -104,32 +113,31 @@ const SEED_RECIPES=[{"id": "r1", "title": "מרק בצל צרפתי", "chefName"
 {"id": "r38", "title": "קרפ סוזט", "chefName": "אלן דוקאס", "chef": null, "michelin": 3, "cat": "קינוחים", "sub": "חלבי", "diff": 2, "time": 45, "quick": false, "rating": 4.7, "rc": 234, "approved": true, "userR": false, "desc": "קרפ דק בחמאה קרמלית עם תפוז ולבנדר, מוצת קוניאק ליד השולחן.", "steps": ["הכינו בצק קרפ: קמח, ביצים, חלב, חמאה. הניחו לנוח 30 דקות.", "טגנו קרפ דקים על מחבת חמה עם חמאה.", "הכינו ציפוי סוזט: גרידת תפוז, מיץ תפוז, סוכר, חמאה.", "ציפו קרפ מקופלים ברביעים ברוטב.", "הוסיפו קוניאק ובעטו ליד השולחן."], "ings": [{"n": "קמח", "q": "120 גר'", "g": "120 גר", "cal": 432, "p": 12, "c": 86, "f": 1, "fb": 3}, {"n": "ביצים", "q": "3 יח'", "g": "180 גר", "cal": 210, "p": 18, "c": 0, "f": 15, "fb": 0}, {"n": "חלב", "q": "300 מ\"ל", "g": "300 מ\"ל", "cal": 150, "p": 10, "c": 14, "f": 5, "fb": 0, "aN": "חלב שקדים", "aQ": "300 מ\"ל", "aC": 60, "aP": 2, "aC2": 8, "aF": 3, "aFb": 0}, {"n": "חמאה", "q": "80 גר'", "g": "80 גר", "cal": 580, "p": 0, "c": 0, "f": 66, "fb": 0}, {"n": "מיץ תפוז", "q": "2 תפוזים", "g": "≈200 מ\"ל", "cal": 90, "p": 1, "c": 22, "f": 0, "fb": 1}]},
 {"id": "r39", "title": "ויניארט שרימפס", "chefName": "נובו מטסוהיסה", "chef": "nobu", "michelin": 1, "cat": "ראשונות", "sub": null, "diff": 2, "time": 20, "quick": true, "rating": 4.6, "rc": 198, "approved": true, "userR": false, "desc": "שרימפס גדולים בסגנון נובו — דגים עם ציפוי פנקו פריך ורוטב פקאנצ'ו.", "steps": ["נקו שרימפס גדולים. תבלו במלח ופלפל.", "טבלו בקמח, ביצה ולחם פנקו. הלבישו היטב.", "טגנו בשמן עמוק 2–3 דקות עד זהוב.", "הכינו רוטב: מיונז יפני, סרירצ'ה, מיץ לימון.", "הגישו מיד עם רוטב ומלח הים."], "ings": [{"n": "שרימפס גדולים", "q": "12 יח'", "g": "≈300 גר", "cal": 280, "p": 48, "c": 0, "f": 8, "fb": 0}, {"n": "לחם פנקו", "q": "100 גר'", "g": "100 גר", "cal": 380, "p": 10, "c": 72, "f": 5, "fb": 2}, {"n": "מיונז יפני", "q": "3 כפות", "g": "≈45 גר", "cal": 270, "p": 0, "c": 4, "f": 28, "fb": 0}, {"n": "ביצה", "q": "1 יח'", "g": "≈60 גר", "cal": 70, "p": 6, "c": 0, "f": 5, "fb": 0}]},
 {"id": "r40", "title": "טארט לימון מרנג", "chefName": "פייר הרמה", "chef": "herme", "michelin": 0, "cat": "קינוחים", "sub": "חלבי", "diff": 3, "time": 120, "quick": false, "rating": 4.9, "rc": 356, "approved": true, "userR": false, "desc": "טארט לימון קלאסי עם קרם לימון עז ומרנג שרוף לפיד.", "steps": ["הכינו קלמה לימון: מיץ לימון, גרידה, ביצים, סוכר, חמאה. בשלו תוך ערבוב עד 82°.", "הכינו בצק פריך: קמח, אבקת סוכר, חמאה, ביצה. אפו 180° ל-18 דקות.", "מלאו קלמה בתוך הקלייה. קררו 2 שעות.", "הכינו מרנג שווייצרי: חלבונים+סוכר על בן-מארי עד 70°. הקציפו.", "זלפו מרנג. שרפו עם לפיד."], "ings": [{"n": "מיץ לימון", "q": "150 מ\"ל", "g": "150 מ\"ל", "cal": 40, "p": 0, "c": 10, "f": 0, "fb": 0}, {"n": "ביצים", "q": "4 יח'", "g": "≈240 גר", "cal": 280, "p": 24, "c": 0, "f": 20, "fb": 0}, {"n": "חמאה", "q": "150 גר'", "g": "150 גר", "cal": 1080, "p": 0, "c": 0, "f": 120, "fb": 0}, {"n": "קמח", "q": "200 גר'", "g": "200 גר", "cal": 720, "p": 20, "c": 144, "f": 2, "fb": 6}, {"n": "סוכר", "q": "200 גר'", "g": "200 גר", "cal": 800, "p": 0, "c": 200, "f": 0, "fb": 0}]}];
-// ── STORAGE ──
-const LS={get:(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 
-// ── CONSTANTS ──
+// ══════════════════════════════════════════
+//  STORAGE + CONSTANTS
+// ══════════════════════════════════════════
+const LS={
+  get:(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
+};
 const CH={ramsay:{n:'גורדון רמזי',s:3},blumenthal:{n:'הסטון בלומנתל',s:3},bottura:{n:'מסימו בוטורה',s:3},adria:{n:'פרן אדריא',s:3},nobu:{n:'נובו מטסוהיסה',s:1},pepin:{n:"ז'אק פּפּן",s:0},child:{n:"ז'וליה צ'יילד",s:2},ottolenghi:{n:'יותם אוטולנגי',s:0},herme:{n:'פייר הרמה',s:0},batali:{n:'מריו בטאלי',s:0}};
 const CATS=[{name:'ראשונות',em:'🥗',bg:'#3C3489',ft:'#fff',sub:null},{name:'סלטים',em:'🥙',bg:'#27500A',ft:'#fff',sub:null},{name:'מרקים',em:'🍲',bg:'#0C447C',ft:'#fff',sub:null},{name:'עיקריות',em:'🍽',bg:'#633806',ft:'#fff',sub:['עוף','בשר','דגים','פרווה']},{name:'קינוחים',em:'🍰',bg:'#72243E',ft:'#fff',sub:['חלבי','פרווה']},{name:'מהירי הכנה',em:'⚡',bg:'#085041',ft:'#fff',sub:null}];
 const DPS=[{name:'מרק פטריות אסם',c:71,p:4,f:3},{name:'פתיתים אפויים',c:74,p:8,f:3},{name:'לחם פרוס',c:48,p:8,f:3},{name:"קוטג' 3%",c:4,p:11,f:3},{name:'אורז מבושל',c:28,p:3,f:0.3},{name:'חזה עוף מבושל',c:0,p:31,f:3},{name:'בננה',c:20,p:1,f:0.3},{name:'אבוקדו',c:2,p:2,f:15}];
 const DL=['','קל','בינוני','קשה'];
 const SEED_USERS=[{id:'admin',name:'מנהל מערכת',email:'admin@taamim.co.il',pass:'admin123',role:'admin'},{id:'u1',name:'שרה כהן',email:'sarah@example.com',pass:'user123',role:'user'}];
 const FEMS={r1:'🍲',r2:'🥗',r3:'🍞',r4:'🥩',r5:'🍗',r6:'🐟',r7:'🍄',r8:'☕',r9:'🍫',r10:'🍳',r11:'🦐',r12:'🍅',r13:'🥣',r14:'🥬',r15:'🥑',r16:'🍴',r17:'🥩',r18:'🐙',r19:'🐟',r20:'🍗',r21:'🍷',r22:'🦆',r23:'🥩',r24:'🐑',r25:'🍖',r26:'🎃',r27:'🌿',r28:'🍝',r29:'🧄',r30:'🍳',r31:'🍮',r32:'🍎',r33:'🍫',r34:'🧁',r35:'🍳',r36:'🧁',r37:'🥑',r38:'🥞',r39:'🦐',r40:'🍋'};
-const FBGS=['#3C3489','#27500A','#0C447C','#633806','#72243E','#085041','#5C3416','#1E5429','#8B3A1A','#9B2D10','#0F3D6B','#1A0A04','#2C1608','#3A2415','#6B1414','#7A5814'];
 
-// ── HELPERS ──
+// ── Helpers ──
 const calcEx=(c,p,f)=>({carb:Math.round(c/15*10)/10,prot:Math.round(p/7*10)/10,fat:Math.round(f/5*10)/10});
 const iget=(g,k,i,alts)=>{const use=g.aN&&alts[i];const m={cal:'cal',p:'p',c:'c',f:'f',fb:'fb'};const a={cal:'aC',p:'aP',c:'aC2',f:'aF',fb:'aFb'};return use?(g[a[k]]??g[m[k]]):g[m[k]];};
 const fmt=(v,s)=>Math.round(v/s);
 const fmtD=(v,s)=>Math.round(v/s*10)/10;
 const gAK=()=>LS.get('anthropic_key','');
 
-// ── DB INIT ──
+// ── DB ──
 function initDB(){
-  if(LS.get('dbi')!==3){
-    LS.set('users',SEED_USERS);
-    LS.set('recs',SEED_RECIPES);
-    LS.set('dbi',3);
-  }
+  if(LS.get('dbi')!==4){LS.set('users',SEED_USERS);LS.set('recs',SEED_RECIPES);LS.set('dbi',4);}
 }
 initDB();
 const gU=()=>LS.get('users',[]);
@@ -140,11 +148,14 @@ const appR=()=>gR().filter(r=>r.approved);
 
 let CU=LS.get('cu',null);
 let S={tab:'home',rid:null,cat:null,sub:null,alts:{},sug:false,sv:1,rtab:'ings',lb:false,
-  scan:{name:'',carbs:'',prot:'',fat:'',grams:'100',result:null,demoIdx:-1,img:null,analyzing:false,err:''},
+  scan:{name:'',carbs:'',prot:'',fat:'',grams:'100',result:null,demoIdx:-1,img:null,analyzing:false,err:'',ocrRunning:false,ocrPct:0,ocrMsg:''},
   sf:{title:'',chefName:'',cat:'ראשונות',sub:'',diff:1,time:30,steps:[''],ings:[{n:'',q:'',g:'',cal:''}]},
-  sfE:'',sfOk:false,srch:'',genLoading:false};
+  sfE:'',sfOk:false,
+  srch:'',srchLoading:false,srchResult:null /* {recipe, source} */ };
 
-// ── CANVAS FOOD ART ──
+// ══════════════════════════════════════════
+//  CANVAS FOOD ART
+// ══════════════════════════════════════════
 const IC={};
 function gi(id,w,h,s=''){
   const k=`${id}_${w}_${h}`;
@@ -165,19 +176,22 @@ function drawF(ctx,id,w,h){
   vig(ctx,w,h);
 }
 
-// ── RENDER ──
+// ══════════════════════════════════════════
+//  RENDER HELPERS
+// ══════════════════════════════════════════
 function setAct(t){document.querySelectorAll('.ti').forEach(x=>x.classList.remove('on'));const el=document.getElementById('t-'+t);if(el)el.classList.add('on');}
 function nav(back,bFn,mid){
   document.getElementById('tnav').innerHTML=`<div class="tnav">${back?`<button class="bb" onclick="${bFn}">← ${back}</button>`:`<div class="logo">טע<span>מ</span>ים</div>`}<span style="font-size:13px;font-weight:700;color:#555">${mid||''}</span><span></span></div>`;
 }
 function rnd2(html){const el=document.getElementById('scr');el.innerHTML=html;el.scrollTop=0;}
 
-// ── TAB NAV ──
 function gTab(t,o={}){S.tab=t;Object.assign(S,o);setAct(t);
   if(t==='home')pgHome();else if(t==='search')pgSearch();else if(t==='scan')pgScan();else if(t==='add')pgAdd();else if(t==='profile')pgProfile();
 }
 
-// ── HOME ──
+// ══════════════════════════════════════════
+//  HOME
+// ══════════════════════════════════════════
 function pgHome(){
   const recs=appR();nav(null,null,null);
   rnd2(`<div style="padding:14px 14px 8px"><div style="font-size:22px;font-weight:700">מה מבשלים היום?</div><div style="font-size:12px;color:#888;margin-top:2px">${recs.length} מתכונים · שפי מישלן ומהקהילה</div></div>
@@ -188,7 +202,9 @@ function pgHome(){
   ${recs.slice(0,6).map(r=>rCard(r)).join('')}`);
 }
 
-// ── CATEGORY ──
+// ══════════════════════════════════════════
+//  CATEGORY
+// ══════════════════════════════════════════
 function showCat(cat,sub){
   S.cat=cat;S.sub=sub||null;
   const ci=CATS.find(c=>c.name===cat);
@@ -222,7 +238,9 @@ function rCard(r){
   </div>`;
 }
 
-// ── RECIPE DETAIL ──
+// ══════════════════════════════════════════
+//  RECIPE DETAIL
+// ══════════════════════════════════════════
 function showRecipe(id){S.rid=id;S.alts={};S.sug=false;S.sv=1;S.rtab='ings';S.lb=false;_rRec();}
 function _rRec(){
   const r=gR().find(x=>x.id===S.rid);if(!r)return;
@@ -239,9 +257,9 @@ function _rRec(){
   const SVOP=[1,2,3,4,6,8];
   const MAC=[['חלבון',tP,'#185FA5'],['פחמימות',tCa,'#854F0B'],['שומן',tF,'#72243E'],['סיבים',tFb,'#085041']];
   const ex=calcEx(tCa,tP,tF);const steps=r.steps||[];
-  const curR=r.ratings&&CU?r.ratings[CU.id]||0:S.stars||0;
+  const curR=r.ratings&&CU?r.ratings[CU.id]||0:0;
   nav(r.cat,`showCat('${r.cat}')`,null);
-  if(S.lb){rnd2(`<div onclick="S.lb=false;_rRec()" style="min-height:460px;overflow:hidden;position:relative;cursor:pointer">${gi(r.id,400,460,'height:460px;')}<div style="position:absolute;bottom:0;right:0;left:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:24px 18px 20px"><div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:5px">${r.title}</div><div style="font-size:12px;color:rgba(255,255,255,.9);line-height:1.6">${r.desc}</div>${ms?`<div style="margin-top:10px;display:inline-block;padding:4px 12px;background:rgba(255,255,255,.15);border-radius:20px;font-size:12px;color:#F9CB42;font-weight:700">${ms} ${nm}</div>`:''}</div><div style="position:absolute;top:16px;right:16px;padding:6px 12px;background:rgba(0,0,0,.5);border-radius:8px;color:#fff;font-size:12px;font-weight:700">× סגור</div></div>`);return;}
+  if(S.lb){rnd2(`<div onclick="S.lb=false;_rRec()" style="min-height:460px;overflow:hidden;position:relative;cursor:pointer">${gi(r.id,400,460,'height:460px;')}<div style="position:absolute;bottom:0;right:0;left:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:24px 18px 20px"><div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:5px">${r.title}</div><div style="font-size:12px;color:rgba(255,255,255,.9);line-height:1.6">${r.desc||''}</div>${ms?`<div style="margin-top:10px;display:inline-block;padding:4px 12px;background:rgba(255,255,255,.15);border-radius:20px;font-size:12px;color:#F9CB42;font-weight:700">${ms} ${nm}</div>`:''}</div><div style="position:absolute;top:16px;right:16px;padding:6px 12px;background:rgba(0,0,0,.5);border-radius:8px;color:#fff;font-size:12px;font-weight:700">× סגור</div></div>`);return;}
   rnd2(`
     <div onclick="S.lb=true;_rRec()" style="cursor:zoom-in;position:relative;height:175px;overflow:hidden">${gi(r.id,400,175)}<div style="position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.65));pointer-events:none"></div><div style="position:absolute;bottom:10px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-end"><span style="font-size:11px;color:#fff;background:rgba(0,0,0,.5);padding:4px 10px;border-radius:7px;font-weight:700">🔍 להגדלה</span>${ms?`<span style="font-size:11px;color:#F9CB42;background:rgba(0,0,0,.5);padding:4px 10px;border-radius:7px;font-weight:700">${ms} ${nm}</span>`:''}</div></div>
     <div style="padding:12px 14px 10px;border-bottom:1px solid #E8E6DE;background:#fff">
@@ -294,150 +312,352 @@ function _rRec(){
           <div style="display:flex;direction:ltr;gap:1px">${[1,2,3,4,5].map(n=>`<button onclick="rateR('${r.id}',${n})" style="background:none;border:none;font-size:26px;cursor:pointer;color:${n<=curR?'#BA7517':'#DDD'};padding:0 1px;line-height:1">★</button>`).join('')}</div>
         </div>
       </div>
-    </div>
-  `);
+    </div>`);
 }
 function rateR(id,stars){
   if(!CU){alert('יש להתחבר כדי לדרג');return;}
   const recs=gR();const r=recs.find(x=>x.id===id);if(!r)return;
   if(!r.ratings)r.ratings={};r.ratings[CU.id]=stars;
   const vals=Object.values(r.ratings);r.rating=Math.round(vals.reduce((s,v)=>s+v,0)/vals.length*10)/10;r.rc=vals.length;
-  sR(recs);S.stars=stars;_rRec();
+  sR(recs);_rRec();
 }
 
 // ══════════════════════════════════════════
-//  SEARCH — FIX: keeps keyboard open
-//  Strategy: render the outer shell once,
-//  then only update #srch-res + #srch-ai
+//  SEARCH — FIX keyboard + internet search
 // ══════════════════════════════════════════
-let _srchReady=false;
 function pgSearch(){
   nav(null,null,'חיפוש');
   const scr=document.getElementById('scr');
-  // Only build the skeleton once — never replace the input element
   if(!scr.querySelector('#srch-in')){
-    _srchReady=false;
     scr.innerHTML=`
       <div style="padding:12px 14px">
-        <input id="srch-in" class="fi" type="search" inputmode="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="חפש מתכון, שף, רכיב..." style="font-size:15px;padding:12px 14px">
+        <input id="srch-in" class="fi" type="search" inputmode="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="חפש מתכון, שף, קטגוריה..." style="font-size:15px;padding:12px 14px">
       </div>
-      <div id="srch-res"></div>
-      <div id="srch-ai" style="padding:0 14px 14px"></div>`;
-    document.getElementById('srch-in').addEventListener('input',function(){
-      S.srch=this.value;
-      _doSrch();
-    });
-    // focus after render
-    setTimeout(()=>{const inp=document.getElementById('srch-in');if(inp)inp.focus();},50);
-    _srchReady=true;
+      <div id="srch-local"></div>
+      <div id="srch-net" style="padding:0 14px 14px"></div>
+      <div id="srch-preview"></div>`;
+    document.getElementById('srch-in').addEventListener('input',function(){S.srch=this.value;S.srchResult=null;_doSrch();});
+    setTimeout(()=>{const inp=document.getElementById('srch-in');if(inp)inp.focus();},60);
   }
   _doSrch();
 }
 
 function _doSrch(){
   const q=(S.srch||'').trim();
-  const res=document.getElementById('srch-res');
-  const ai=document.getElementById('srch-ai');
-  if(!res||!ai)return;
+  const loc=document.getElementById('srch-local');
+  const net=document.getElementById('srch-net');
+  const prev=document.getElementById('srch-preview');
+  if(!loc||!net)return;
 
   if(q.length<2){
-    res.innerHTML=`<div style="padding:24px;text-align:center;color:#888;font-size:13px">הקלד לפחות 2 אותיות לחיפוש...</div>`;
-    ai.innerHTML='';
+    loc.innerHTML=`<div style="padding:24px;text-align:center;color:#888;font-size:13px">הקלד לפחות 2 אותיות...</div>`;
+    net.innerHTML='';
+    if(prev)prev.innerHTML='';
     return;
   }
-  const found=appR().filter(r=>{
-    const t=(r.title||'').toLowerCase();
-    const ch=(r.chefName||'').toLowerCase();
-    const d=(r.desc||'').toLowerCase();
-    const qq=q.toLowerCase();
-    return t.includes(qq)||ch.includes(qq)||d.includes(qq);
-  });
-  res.innerHTML=found.length===0
-    ?`<div style="padding:20px;text-align:center;color:#888;font-size:13px">לא נמצאו תוצאות עבור "${q}"</div>`
-    :found.map(r=>rCard(r)).join('');
 
+  // local search
+  const found=appR().filter(r=>{
+    const qq=q.toLowerCase();
+    return (r.title||'').toLowerCase().includes(qq)||
+           (r.chefName||'').toLowerCase().includes(qq)||
+           (r.desc||'').toLowerCase().includes(qq)||
+           (r.cat||'').toLowerCase().includes(qq);
+  });
+
+  loc.innerHTML = found.length===0
+    ? `<div style="padding:16px 14px 8px;text-align:center;color:#888;font-size:13px">לא נמצאו תוצאות מקומיות עבור "${q}"</div>`
+    : `<div style="padding:10px 14px 4px;font-size:12px;color:#888;font-weight:700">נמצאו ${found.length} מתכונים באפליקציה</div>`+found.map(r=>rCard(r)).join('');
+
+  // internet search button
   const ak=gAK();
-  ai.innerHTML=`<button onclick="genAI('${q.replace(/'/g,"\\'")}',this)" style="width:100%;padding:12px;background:${S.genLoading?'#888':'#3C3489'};color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">${S.genLoading?'⏳ Claude מחפש ומוסיף מתכון...':'✨ הוסף מתכון מישלן ב-AI: "'+q+'"'}</button>${!ak?`<div style="font-size:11px;color:#c0392b;text-align:center;margin-top:6px">⚠️ נדרש מפתח API — הגדר בפרופיל</div>`:''}`;
+  if(S.srchLoading){
+    net.innerHTML=`<div class="card" style="margin-top:4px;border:1.5px solid #3C3489;display:flex;align-items:center;gap:12px">
+      <div style="font-size:24px">🌐</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#3C3489">מחפש באינטרנט...</div>
+        <div style="font-size:11px;color:#888;margin-top:2px">Claude סורק מתכוני מישלן</div>
+      </div>
+      <div style="margin-right:auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3C3489" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+    </div>`;
+  } else {
+    net.innerHTML=`<button onclick="searchInternet('${q.replace(/'/g,"\\'")}')" style="width:100%;padding:13px 14px;margin-top:4px;background:${ak?'#3C3489':'#888'};color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span>🌐</span><span>${found.length===0?`חפש "${q}" באינטרנט`:`חפש עוד מתכונים ב"${q}"`}</span>
+    </button>${!ak?`<div style="font-size:11px;color:#c0392b;text-align:center;margin-top:6px">⚠️ נדרש מפתח API (פרופיל → מפתח API) לחיפוש אינטרנט</div>`:''}`;
+  }
+
+  // show preview if exists
+  if(prev&&S.srchResult){
+    prev.innerHTML=renderRecipePreview(S.srchResult);
+  } else if(prev){
+    prev.innerHTML='';
+  }
 }
 
-// ══════════════════════════════════════════
-//  AI RECIPE GENERATOR (web search)
-// ══════════════════════════════════════════
-async function genAI(q,btn){
+// ── INTERNET RECIPE SEARCH ──
+async function searchInternet(q){
   const ak=gAK();
-  if(!ak){alert('כדי לחפש מתכונים ב-AI נדרש מפתח Anthropic API.\n\nהוסף אותו בלשונית פרופיל → מפתח API');gTab('profile');return;}
-  S.genLoading=true;if(btn){btn.disabled=true;btn.textContent='⏳ Claude מחפש...';}
+  if(!ak){alert('נדרש מפתח Anthropic API.\nהוסף בלשונית פרופיל → מפתח API');gTab('profile');return;}
+  S.srchLoading=true;S.srchResult=null;_doSrch();
 
-  const prompt=`אתה מומחה למטבח מישלן. המשתמש חיפש: "${q}".
-חפש ומצא מתכון אמיתי מפורסם של שף מישלן שקשור לחיפוש.
-החזר JSON בלבד (ללא markdown, ללא הסבר), בפורמט הזה בדיוק:
-{"title":"שם המתכון בעברית","chefName":"שם השף","michelin":3,"cat":"עיקריות","sub":"בשר","diff":2,"time":45,"quick":false,"rating":4.8,"rc":200,"desc":"תיאור קצר","steps":["שלב 1","שלב 2","שלב 3","שלב 4","שלב 5"],"ings":[{"n":"שם רכיב","q":"כמות","g":"גרמים","cal":100,"p":10,"c":5,"f":8,"fb":1}]}
+  const prompt=`חפש באינטרנט מתכון מפורסם עבור: "${q}".
 
-כללים:
-- cat חייב להיות אחד מ: ראשונות, סלטים, מרקים, עיקריות, קינוחים, מהירי הכנה
-- sub (רק לעיקריות): עוף/בשר/דגים/פרווה, (רק לקינוחים): חלבי/פרווה
-- המתכון צריך להיות אמיתי ומפורסם
-- לפחות 5 שלבי הכנה מפורטים
-- לפחות 5 רכיבים עם נתוני מאקרו מדויקים`;
+העדפות לפי סדר:
+1. שפי מישלן מפורסמים (רמזי, בוטורה, דוקאס, רובשון, קלר, בלומנתל)
+2. שפי טלוויזיה מפורסמים (אוטולנגי, ג'יימי אוליבר, נייג'לה)
+3. מתכון קלאסי מוכר אחר
+
+חפש באינטרנט ומצא פרטים מדויקים. החזר JSON בלבד:
+{"title":"","chefName":"","michelin":0,"cat":"עיקריות","sub":null,"diff":2,"time":45,"quick":false,"rating":4.7,"rc":100,"desc":"","source":"שם האתר שממנו נלקח","steps":[""],"ings":[{"n":"","q":"","g":"","cal":0,"p":0,"c":0,"f":0,"fb":0}]}
+
+חשוב: המתכון חייב להיות אמיתי ומלא עם לפחות 5 שלבי הכנה ו-5 רכיבים.`;
 
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':ak,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2500,
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:3000,
         tools:[{"type":"web_search_20250305","name":"web_search"}],
         messages:[{role:'user',content:prompt}]
       })
     });
-    if(!res.ok){throw new Error('HTTP '+res.status);}
+    if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     const text=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
     const match=text.match(/\{[\s\S]*\}/);
-    if(!match)throw new Error('No JSON in response');
+    if(!match)throw new Error('לא נמצא JSON');
     const recipe=JSON.parse(match[0]);
-    if(!recipe.title||!recipe.ings||!recipe.steps)throw new Error('Invalid recipe structure');
-    recipe.id='ai_'+Date.now();
-    recipe.approved=true;
+    if(!recipe.title||!recipe.ings||!recipe.steps)throw new Error('מבנה לא תקין');
+    recipe.id='net_'+Date.now();
+    recipe.approved=false;// pending until user confirms
     recipe.userR=false;
     if(!recipe.ratings)recipe.ratings={};
     if(!recipe.michelin)recipe.michelin=0;
-    const recs=gR();
-    if(recs.find(r=>r.title===recipe.title)){
-      alert(`"${recipe.title}" כבר קיים במאגר!`);
-    } else {
-      recs.push(recipe);sR(recs);
-      alert(`✅ "${recipe.title}" נוסף בהצלחה!\nשל ${recipe.chefName} — ${recipe.michelin} כוכבי מישלן`);
-      S.srch='';
-      const inp=document.getElementById('srch-in');
-      if(inp)inp.value='';
-      _doSrch();
-    }
+    S.srchResult={recipe, source:recipe.source||'אינטרנט'};
+    S.srchLoading=false;
+    _doSrch();
+    // scroll to preview
+    setTimeout(()=>{const p=document.getElementById('srch-preview');if(p)p.scrollIntoView({behavior:'smooth',block:'start'});},200);
   }catch(e){
-    console.error(e);
-    alert('שגיאה: '+e.message+'\nודא שמפתח ה-API תקין ב: פרופיל → מפתח API');
+    S.srchLoading=false;
+    _doSrch();
+    const net=document.getElementById('srch-net');
+    if(net)net.innerHTML+=`<div style="background:#FCEBEB;color:#791F1F;font-size:12px;font-weight:700;padding:10px;border-radius:8px;margin-top:8px">שגיאה: ${e.message}</div>`;
   }
-  S.genLoading=false;
+}
+
+// ── RECIPE PREVIEW CARD (internet result) ──
+function renderRecipePreview(sr){
+  const r=sr.recipe;
+  const nm=r.chefName||'שף אנונימי';
+  const ms=r.michelin>0?'★'.repeat(r.michelin)+' ':'';
+  const ex=calcEx(r.ings.reduce((s,g)=>s+(g.c||0),0),r.ings.reduce((s,g)=>s+(g.p||0),0),r.ings.reduce((s,g)=>s+(g.f||0),0));
+  const alreadyExists=gR().find(x=>x.title.trim().toLowerCase()===r.title.trim().toLowerCase());
+
+  return`<div style="padding:0 0 6px">
+    <div style="padding:10px 14px 4px;font-size:12px;color:#3C3489;font-weight:700;display:flex;align-items:center;gap:6px">
+      <span>🌐</span><span>נמצא באינטרנט${sr.source?` (${sr.source})`:''}</span>
+    </div>
+    <div class="rp-card">
+      <div class="rp-header">
+        ${ms?`<div style="font-size:12px;color:#BA7517;font-weight:700;margin-bottom:4px">${ms}${nm}</div>`:`<div style="font-size:12px;color:#666;margin-bottom:4px">${nm}</div>`}
+        <div style="font-size:17px;font-weight:700;margin-bottom:6px">${r.title}</div>
+        <div style="font-size:12px;color:#555;line-height:1.65;margin-bottom:8px">${r.desc||''}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+          <span class="tag" style="background:#F0EEE6;color:#444">${r.cat}${r.sub?' / '+r.sub:''}</span>
+          <span class="tag" style="background:${['','#EAF3DE','#FAEEDA','#FCEBEB'][r.diff]};color:${['','#27500A','#633806','#791F1F'][r.diff]}">${DL[r.diff]}</span>
+          <span class="tag" style="background:#F0EEE6;color:#444">${r.time} דק'</span>
+          ${r.quick?`<span class="tag" style="background:#EAF3DE;color:#27500A">מהיר</span>`:''}
+          ${ex.carb>0?`<span class="tag" style="background:#DBEAFE;color:#1e40af">🍞${ex.carb}</span>`:''}
+          ${ex.prot>0?`<span class="tag" style="background:#DCFCE7;color:#166534">🥩${ex.prot}</span>`:''}
+          ${ex.fat>0?`<span class="tag" style="background:#FEF9C3;color:#854d0e">🥑${ex.fat}</span>`:''}
+        </div>
+        <!-- steps preview -->
+        <div style="background:#F8F7F2;border-radius:8px;padding:10px;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:7px">שלבי הכנה (${r.steps.length} שלבים)</div>
+          ${r.steps.slice(0,3).map((st,i)=>`<div style="display:flex;gap:8px;margin-bottom:${i<2?'6px':'0'}"><div style="width:20px;height:20px;border-radius:50%;background:#1A1A18;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${i+1}</div><div style="font-size:12px;color:#444;line-height:1.55">${st}</div></div>`).join('')}
+          ${r.steps.length>3?`<div style="font-size:11px;color:#888;margin-top:6px;padding-right:28px">+ עוד ${r.steps.length-3} שלבים...</div>`:''}
+        </div>
+        <!-- ingredients preview -->
+        <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:5px">רכיבים (${r.ings.length})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${r.ings.slice(0,6).map(g=>`<span style="background:#F0EEE6;border-radius:6px;padding:3px 8px;font-size:11px;color:#444">${g.n}</span>`).join('')}${r.ings.length>6?`<span style="font-size:11px;color:#888">+${r.ings.length-6} עוד</span>`:''}</div>
+      </div>
+      <div class="rp-actions">
+        ${alreadyExists
+          ?`<div style="flex:1;padding:11px;background:#EAF3DE;border-radius:9px;font-size:13px;font-weight:700;color:#27500A;text-align:center">✅ המתכון כבר קיים באפליקציה</div>`
+          :`<button class="rp-btn-add" onclick="addNetRecipe()">✅ הוסף לאפליקציה</button>`}
+        <button class="rp-btn-skip" onclick="S.srchResult=null;_doSrch()">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function addNetRecipe(){
+  if(!S.srchResult)return;
+  const r=S.srchResult.recipe;
+  if(gR().find(x=>x.title.trim().toLowerCase()===r.title.trim().toLowerCase())){
+    alert(`"${r.title}" כבר קיים!`);return;
+  }
+  r.approved=true;// auto-approve from internet
+  const recs=gR();recs.push(r);sR(recs);
+  const ms=r.michelin>0?'★'.repeat(r.michelin)+' ':'';
+  alert(`✅ "${r.title}" נוסף!\n${ms}${r.chefName||''}`);
+  S.srchResult=null;S.srch='';
+  const inp=document.getElementById('srch-in');
+  if(inp)inp.value='';
   _doSrch();
 }
 
 // ══════════════════════════════════════════
-//  SCAN — FIX: send API key in header
+//  SCAN — OCR with Tesseract.js (NO API KEY)
+//  + fallback manual entry
 // ══════════════════════════════════════════
+let _tessLib=null;
+function loadTess(cb){
+  if(_tessLib){cb(_tessLib);return;}
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js';
+  s.onload=()=>{_tessLib=window.Tesseract;cb(_tessLib);};
+  s.onerror=()=>cb(null);
+  document.head.appendChild(s);
+}
+
+function preprocessImg(dataUrl,cb){
+  const img=new Image();
+  img.onload=()=>{
+    const scale=Math.min(1800/img.width,1800/img.height,4);
+    const c=document.createElement('canvas');
+    c.width=img.width*scale;c.height=img.height*scale;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(img,0,0,c.width,c.height);
+    // greyscale + contrast
+    const id=ctx.getImageData(0,0,c.width,c.height);const d=id.data;
+    for(let i=0;i<d.length;i+=4){
+      const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+      const v=g<128?Math.max(0,g-50):Math.min(255,g+50);
+      d[i]=d[i+1]=d[i+2]=v;
+    }
+    ctx.putImageData(id,0,0);
+    cb(c.toDataURL('image/png'));
+  };
+  img.src=dataUrl;
+}
+
+function parseNutrition(text){
+  const t=text.replace(/,/g,'.').toLowerCase();
+  const res={name:'',carbs:null,protein:null,fat:null,calories:null};
+  // calories
+  const cm=t.match(/(?:קלוריות|calories?|kcal|קק"ל|אנרגיה|energy)[^\d]*(\d+\.?\d*)/i);
+  if(cm)res.calories=parseFloat(cm[1]);
+  // carbs
+  const cbm=t.match(/(?:פחמימות?|carbohydrat|סה"כ פחמ|total carb)[^\d]*(\d+\.?\d*)/i);
+  if(cbm)res.carbs=parseFloat(cbm[1]);
+  // protein
+  const pm=t.match(/(?:חלבון|protein)[^\d]*(\d+\.?\d*)/i);
+  if(pm)res.protein=parseFloat(pm[1]);
+  // fat
+  const fm=t.match(/(?:שומן(?!\s*רווי)|fat|סה"כ שומן)[^\d]*(\d+\.?\d*)/i);
+  if(fm)res.fat=parseFloat(fm[1]);
+  // product name: first non-numeric meaningful line
+  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l.length>3&&!/^\d/.test(l)&&!/[\|\\\/]/.test(l));
+  if(lines.length>0)res.name=lines[0].substring(0,50);
+  return res;
+}
+
+function updOcrProgress(pct,msg){
+  const el=document.getElementById('ocr-prog');
+  if(!el)return;
+  el.innerHTML=`<div class="ocr-bar">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:13px;font-weight:700;color:#1e40af">🔍 מנתח תמונה (OCR)</span>
+      <span style="font-size:13px;font-weight:700;color:#1e40af">${Math.round(pct)}%</span>
+    </div>
+    <div style="background:#DBEAFE;border-radius:6px;height:8px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:#1e40af;border-radius:6px;transition:width .3s"></div>
+    </div>
+    <div style="font-size:11px;color:#555;margin-top:5px">${msg}</div>
+    <div style="font-size:10px;color:#888;margin-top:3px">ניתוח מקומי — ללא שרת, ללא מפתח API</div>
+  </div>`;
+}
+
+async function handleCam(inp){
+  const file=inp.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    S.scan.img=e.target.result;S.scan.analyzing=true;S.scan.err='';S.scan.result=null;S.scan.ocrRunning=true;
+    pgScan();
+    preprocessImg(e.target.result,async(processed)=>{
+      loadTess(async(Tess)=>{
+        if(!Tess){
+          S.scan.analyzing=false;S.scan.ocrRunning=false;
+          S.scan.err='לא הצלחתי לטעון את מנוע OCR. נסה חיבור אינטרנט טוב יותר.';
+          pgScan();return;
+        }
+        try{
+          updOcrProgress(5,'טוען מנוע...');
+          const worker=await Tess.createWorker(['heb','eng'],1,{
+            logger:m=>{
+              if(m.status==='recognizing text') updOcrProgress(15+m.progress*80,'מזהה טקסט...');
+              else if(m.status==='loading language traineddata') updOcrProgress(8,'טוען שפה...');
+              else if(m.status==='initializing api') updOcrProgress(10,'מאתחל...');
+            }
+          });
+          updOcrProgress(96,'מעבד תוצאות...');
+          const {data:{text}}=await worker.recognize(processed);
+          await worker.terminate();
+          updOcrProgress(100,'✅ הושלם!');
+
+          const parsed=parseNutrition(text);
+          if(parsed.name)S.scan.name=parsed.name;
+          if(parsed.carbs!==null)S.scan.carbs=parsed.carbs;
+          if(parsed.protein!==null)S.scan.prot=parsed.protein;
+          if(parsed.fat!==null)S.scan.fat=parsed.fat;
+
+          const hasData=parsed.carbs!==null||parsed.protein!==null||parsed.fat!==null;
+          if(!hasData){
+            S.scan.err='לא הצלחתי לזהות ערכים תזונתיים. נסה לצלם מקרוב יותר ובאור טוב. הכנס ידנית.';
+          }
+          S.scan.analyzing=false;S.scan.ocrRunning=false;
+          if(hasData)doScanCalc();
+          else pgScan();
+        }catch(err){
+          S.scan.analyzing=false;S.scan.ocrRunning=false;
+          S.scan.err='שגיאה בניתוח: '+err.message;
+          pgScan();
+        }
+      });
+    });
+  };
+  reader.readAsDataURL(file);
+}
+
 function pgScan(){
   const sc=S.scan;const r=sc.result;
-  nav(null,null,'מנתח אריזות');
-  const ak=gAK();
+  nav(null,null,'סורק אריזות');
   rnd2(`<div style="padding:14px">
-    <div style="border:2.5px dashed #C8C6BE;border-radius:14px;padding:20px;text-align:center;cursor:pointer;background:#FAFAF8" onclick="document.getElementById('camIn').click()">
-      ${sc.analyzing?`<div style="font-size:26px;margin-bottom:8px">⏳</div><div style="font-size:14px;font-weight:700;color:#085041">מנתח תמונה עם Claude AI...</div><div style="font-size:12px;color:#666;margin-top:4px">עד 15 שניות</div>`:
-      sc.img?`<img src="${sc.img}" style="max-height:130px;max-width:100%;border-radius:8px;object-fit:contain;margin-bottom:8px"><div style="font-size:12px;color:#085041;font-weight:700">📷 לחץ לצילום מחדש</div>`:
-      `<div style="font-size:38px;margin-bottom:10px">📷</div><div style="font-size:15px;font-weight:700;color:#085041">צלם תווית מוצר</div><div style="font-size:12px;color:#666;margin-top:4px">Claude יקרא ערכים תזונתיים אוטומטית</div><div style="margin-top:10px;padding:7px 16px;background:#085041;color:#fff;border-radius:8px;font-size:13px;font-weight:700;display:inline-block">פתח מצלמה</div>`}
+    <!-- Camera button -->
+    <div style="border:2.5px dashed #C8C6BE;border-radius:14px;padding:20px;text-align:center;cursor:pointer;background:#FAFAF8;transition:border-color .2s" onclick="document.getElementById('camIn').click()" onmouseover="this.style.borderColor='#085041'" onmouseout="this.style.borderColor='#C8C6BE'">
+      ${sc.ocrRunning
+        ? `<div id="ocr-prog"><div class="ocr-bar"><div style="font-size:14px;font-weight:700;color:#1e40af">⏳ מנתח תמונה...</div></div></div>`
+        : sc.img
+          ? `<img src="${sc.img}" style="max-height:130px;max-width:100%;border-radius:8px;object-fit:contain;margin-bottom:8px"><div style="font-size:12px;color:#085041;font-weight:700">📷 לחץ לצילום מחדש</div>`
+          : `<div style="font-size:38px;margin-bottom:10px">📷</div>
+             <div style="font-size:16px;font-weight:700;color:#085041;margin-bottom:4px">צלם תווית מוצר</div>
+             <div style="font-size:12px;color:#666;line-height:1.6">OCR מקומי — ניתוח אוטומטי<br>ללא שרת, ללא מפתח API</div>
+             <div style="margin-top:12px;padding:8px 18px;background:#085041;color:#fff;border-radius:9px;font-size:13px;font-weight:700;display:inline-block">פתח מצלמה</div>`}
     </div>
+    <div id="ocr-prog" style="margin-top:8px"></div>
     ${sc.err?`<div style="background:#FCEBEB;color:#791F1F;font-size:13px;font-weight:700;padding:12px;border-radius:8px;margin-top:10px">${sc.err}</div>`:''}
-    ${!ak?`<div style="background:#FEF9C3;border:1.5px solid #BA7517;border-radius:10px;padding:12px;margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div style="font-size:13px;color:#633806;font-weight:700">⚠️ נדרש מפתח API לניתוח צילום</div><button onclick="gTab('profile')" style="padding:7px 12px;background:#BA7517;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;white-space:nowrap">הגדר</button></div>`:''}
-    <div style="margin-top:12px"><div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px">הכנסה ידנית / דוגמאות:</div><div style="display:flex;gap:5px;flex-wrap:wrap">${DPS.map((d,i)=>`<button onclick="ldDemo(${i})" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${sc.demoIdx===i?'#085041':'#C8C6BE'};background:${sc.demoIdx===i?'#EAF3DE':'#fff'};color:${sc.demoIdx===i?'#085041':'#444'}">${d.name}</button>`).join('')}</div></div>
+
+    <!-- Demo buttons -->
+    <div style="margin-top:12px"><div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px">דוגמאות מהירות (ידני):</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${DPS.map((d,i)=>`<button onclick="ldDemo(${i})" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${sc.demoIdx===i?'#085041':'#C8C6BE'};background:${sc.demoIdx===i?'#EAF3DE':'#fff'};color:${sc.demoIdx===i?'#085041':'#444'}">${d.name}</button>`).join('')}</div>
+    </div>
+
+    <!-- Manual entry -->
     <div class="card" style="margin-top:12px">
-      <div style="margin-bottom:10px"><label class="fl">שם המוצר</label><input class="fi" placeholder="שם..." value="${sc.name}" oninput="S.scan.name=this.value"></div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px">הכנסה ידנית (מהתווית)</div>
+      <div style="margin-bottom:10px"><label class="fl">שם המוצר</label><input class="fi" placeholder="מרק פטריות..." value="${sc.name}" oninput="S.scan.name=this.value"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
         <div><label class="fl">🍞 פחמימות/100</label><input class="fi" type="number" inputmode="decimal" placeholder="71" value="${sc.carbs}" oninput="S.scan.carbs=this.value;S.scan.result=null"></div>
         <div><label class="fl">🥩 חלבון/100</label><input class="fi" type="number" inputmode="decimal" placeholder="4" value="${sc.prot}" oninput="S.scan.prot=this.value;S.scan.result=null"></div>
@@ -446,24 +666,27 @@ function pgScan(){
       <div style="margin-bottom:14px"><label class="fl">כמות שאכלת (גרם)</label><input class="fi" type="number" inputmode="numeric" placeholder="100" value="${sc.grams}" oninput="S.scan.grams=this.value;S.scan.result=null"></div>
       <button onclick="doScanCalc()" class="btn">חשב מנות חלפין</button>
     </div>
+
+    <!-- Results -->
     ${r?`<div class="card" style="margin-top:12px;border:2px solid #085041">
       <div style="font-size:15px;font-weight:700;margin-bottom:1px">${sc.name||'תוצאה'}</div>
       <div style="font-size:11px;color:#666;margin-bottom:12px">${r.g} גרם · ${r.tCal} קלוריות</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-        <div style="background:#DBEAFE;border-radius:10px;padding:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#1e40af">${r.ex.carb}</div><div style="font-size:10px;font-weight:700;color:#1e40af">🍞 פחמימה</div><div style="font-size:9px;color:#3b82f6">${r.tC}ג'</div></div>
-        <div style="background:#DCFCE7;border-radius:10px;padding:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534">${r.ex.prot}</div><div style="font-size:10px;font-weight:700;color:#166534">🥩 חלבון</div><div style="font-size:9px;color:#22c55e">${r.tP}ג'</div></div>
-        <div style="background:#FEF9C3;border-radius:10px;padding:10px;text-align:center"><div style="font-size:24px;font-weight:700;color:#854d0e">${r.ex.fat}</div><div style="font-size:10px;font-weight:700;color:#854d0e">🥑 שומן</div><div style="font-size:9px;color:#ca8a04">${r.tF}ג'</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+        <div style="background:#DBEAFE;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#1e40af">${r.ex.carb}</div><div style="font-size:11px;font-weight:700;color:#1e40af;margin-top:2px">🍞 פחמימה</div><div style="font-size:10px;color:#3b82f6;margin-top:1px">${r.tC}ג'</div></div>
+        <div style="background:#DCFCE7;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#166534">${r.ex.prot}</div><div style="font-size:11px;font-weight:700;color:#166534;margin-top:2px">🥩 חלבון</div><div style="font-size:10px;color:#22c55e;margin-top:1px">${r.tP}ג'</div></div>
+        <div style="background:#FEF9C3;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#854d0e">${r.ex.fat}</div><div style="font-size:11px;font-weight:700;color:#854d0e;margin-top:2px">🥑 שומן</div><div style="font-size:10px;color:#ca8a04;margin-top:1px">${r.tF}ג'</div></div>
       </div>
-      <div style="background:#F8F7F2;border-radius:8px;padding:10px">
-        <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:7px">כמה גרם = מנה אחת?</div>
-        ${r.portionC?`<div style="display:flex;gap:8px;margin-bottom:5px"><span>🍞</span><span style="font-size:13px;color:#444">מנת פחמימה = <strong>${r.portionC} גרם</strong></span></div>`:''}
-        ${r.portionP?`<div style="display:flex;gap:8px;margin-bottom:5px"><span>🥩</span><span style="font-size:13px;color:#444">מנת חלבון = <strong>${r.portionP} גרם</strong></span></div>`:''}
-        ${r.portionF?`<div style="display:flex;gap:8px"><span>🥑</span><span style="font-size:13px;color:#444">מנת שומן = <strong>${r.portionF} גרם</strong></span></div>`:''}
+      <div style="background:#F8F7F2;border-radius:8px;padding:11px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:8px">כמה גרם = מנה אחת?</div>
+        ${r.portionC?`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="font-size:14px">🍞</span><span style="font-size:13px;color:#444">מנת פחמימה = <strong>${r.portionC} גרם</strong></span></div>`:''}
+        ${r.portionP?`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="font-size:14px">🥩</span><span style="font-size:13px;color:#444">מנת חלבון = <strong>${r.portionP} גרם</strong></span></div>`:''}
+        ${r.portionF?`<div style="display:flex;gap:8px"><span style="font-size:14px">🥑</span><span style="font-size:13px;color:#444">מנת שומן = <strong>${r.portionF} גרם</strong></span></div>`:''}
+        <div style="font-size:10px;color:#AAA;margin-top:8px;padding-top:6px;border-top:1px solid #E0DED6">נוסחא: 1500÷%פחמימות · 700÷%חלבון · 500÷%שומן</div>
       </div>
     </div>`:''}
   </div>`);
 }
-function ldDemo(i){const d=DPS[i];S.scan={...S.scan,name:d.name,carbs:d.c,prot:d.p,fat:d.f,demoIdx:i,result:null,img:null,err:''};pgScan();}
+function ldDemo(i){const d=DPS[i];S.scan={...S.scan,name:d.name,carbs:d.c,prot:d.p,fat:d.f,demoIdx:i,result:null,img:null,err:'',ocrRunning:false};pgScan();}
 function doScanCalc(){
   const sc=S.scan;const c=parseFloat(sc.carbs)||0,p=parseFloat(sc.prot)||0,f=parseFloat(sc.fat)||0,g=parseFloat(sc.grams)||100;
   const fc=g/100;const tC=Math.round(c*fc*10)/10,tP=Math.round(p*fc*10)/10,tF=Math.round(f*fc*10)/10;
@@ -471,59 +694,9 @@ function doScanCalc(){
   pgScan();
 }
 
-// SCAN via camera — FIX: correct headers for browser direct access
-async function handleCam(inp){
-  const file=inp.files[0];if(!file)return;
-  const ak=gAK();
-  if(!ak){alert('נדרש מפתח Anthropic API.\nהוסף בלשונית פרופיל → מפתח API');gTab('profile');return;}
-  const reader=new FileReader();
-  reader.onload=async(e)=>{
-    S.scan.img=e.target.result;S.scan.analyzing=true;S.scan.err='';S.scan.result=null;pgScan();
-    const b64=e.target.result.split(',')[1];
-    const mtype=file.type||'image/jpeg';
-    try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'x-api-key':ak,
-          'anthropic-version':'2023-06-01',
-          'anthropic-dangerous-direct-browser-access':'true'
-        },
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
-          max_tokens:600,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:mtype,data:b64}},
-            {type:'text',text:`זוהי תמונה של תווית תזונה על אריזת מוצר.
-חלץ את הנתונים הבאים ל-100 גרם (או 100 מ"ל).
-החזר JSON בלבד ללא markdown וללא הסבר:
-{"name":"שם המוצר","carbs":0,"protein":0,"fat":0,"calories":0}`}
-          ]}]
-        })
-      });
-      if(!res.ok){const err=await res.text();throw new Error('API Error '+res.status+': '+err);}
-      const data=await res.json();
-      const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
-      const match=txt.match(/\{[^}]+\}/);
-      if(!match)throw new Error('לא נמצא JSON בתשובה');
-      const parsed=JSON.parse(match[0]);
-      S.scan.name=parsed.name||'מוצר מצולם';
-      S.scan.carbs=parsed.carbs||'';
-      S.scan.prot=parsed.protein||'';
-      S.scan.fat=parsed.fat||'';
-      S.scan.analyzing=false;
-      doScanCalc();
-    }catch(e){
-      S.scan.analyzing=false;
-      S.scan.err='שגיאה: '+e.message+'. ודא שמפתח ה-API תקין ומוגדר בפרופיל.';
-      pgScan();
-    }
-  };
-  reader.readAsDataURL(file);
-}
-
-// ── ADD ──
+// ══════════════════════════════════════════
+//  ADD RECIPE
+// ══════════════════════════════════════════
 function pgAdd(){
   if(!CU){nav(null,null,'הוסף מתכון');rnd2(`<div style="padding:40px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🔐</div><div style="font-size:16px;font-weight:700;margin-bottom:8px">יש להתחבר</div><button class="btn" style="max-width:200px;margin:0 auto;display:block" onclick="gTab('profile')">כניסה</button></div>`);return;}
   const f=S.sf;const CL=['ראשונות','סלטים','מרקים','עיקריות','קינוחים','מהירי הכנה'];const SM={'עיקריות':['עוף','בשר','דגים','פרווה'],'קינוחים':['חלבי','פרווה']};const ns=SM[f.cat];
@@ -569,22 +742,24 @@ function doSub(){
   sR(recs);S.sfOk=true;pgAdd();
 }
 
-// ── PROFILE ──
+// ══════════════════════════════════════════
+//  PROFILE
+// ══════════════════════════════════════════
 function pgProfile(){
   nav(null,null,'פרופיל');
   const ak=gAK();
   if(!CU){rnd2(`<div style="padding:32px 20px">
-    <div style="text-align:center;margin-bottom:24px"><div style="font-size:52px;margin-bottom:12px">👤</div><div style="font-size:20px;font-weight:700">ברוך הבא לטעמים</div><div style="font-size:13px;color:#666;margin-top:6px">התחבר כדי לדרג ולהגיש מתכונים</div></div>
+    <div style="text-align:center;margin-bottom:24px"><div style="font-size:52px;margin-bottom:12px">👤</div><div style="font-size:20px;font-weight:700">ברוך הבא לטעמים</div></div>
     <div class="card">
       <div style="margin-bottom:10px"><label class="fl">אימייל</label><input class="fi" id="li-e" type="email" inputmode="email" placeholder="you@example.com"></div>
       <div style="margin-bottom:14px"><label class="fl">סיסמה</label><input class="fi" id="li-p" type="password" placeholder="••••••••"></div>
       <div id="li-err" style="color:#c0392b;font-size:13px;margin-bottom:8px;display:none"></div>
       <button onclick="doLogin()" class="btn">כניסה</button>
     </div>
-    <div style="margin-top:12px;padding:12px;background:#F8F7F2;border-radius:10px;font-size:12px;color:#888;text-align:center"><div style="font-weight:700;margin-bottom:4px">חשבונות לבדיקה:</div><div>Admin: admin@taamim.co.il / admin123</div><div style="margin-top:2px">משתמש: sarah@example.com / user123</div></div>
-    <div class="card" style="margin-top:16px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:8px">🔑 מפתח Anthropic API</div>
-      <div style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.65">נדרש לניתוח אריזות ולחיפוש מתכונים ב-AI.<br>קבל מפתח חינם: <a href="https://console.anthropic.com/keys" target="_blank" style="color:#3C3489;font-weight:700">console.anthropic.com</a></div>
+    <div style="margin-top:10px;padding:12px;background:#F8F7F2;border-radius:10px;font-size:12px;color:#888;text-align:center"><div style="font-weight:700;margin-bottom:4px">לבדיקה:</div><div>Admin: admin@taamim.co.il / admin123</div><div style="margin-top:2px">משתמש: sarah@example.com / user123</div></div>
+    <div class="card" style="margin-top:14px;border:1.5px solid #3C3489">
+      <div style="font-size:14px;font-weight:700;margin-bottom:6px">🔑 מפתח Anthropic API <span style="font-size:11px;font-weight:400;color:#666">(לחיפוש מתכונים אינטרנט)</span></div>
+      <div style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.65"><b>OCR (סריקת אריזות) חינמי לחלוטין — ללא מפתח!</b><br>המפתח נדרש רק לחיפוש מתכונים חדשים מהאינטרנט.<br>קבל מפתח: <a href="https://console.anthropic.com/keys" target="_blank" style="color:#3C3489;font-weight:700">console.anthropic.com</a></div>
       <input class="fi" id="ak-in" type="password" placeholder="sk-ant-api03-..." value="${ak}" style="margin-bottom:10px">
       <button onclick="saveAK()" class="btn">שמור מפתח</button>
     </div>
@@ -597,9 +772,9 @@ function pgProfile(){
       <div style="flex:1"><div style="font-size:16px;font-weight:700">${CU.name}</div><div style="font-size:12px;color:#666">${CU.email}</div>${CU.role==='admin'?`<div style="display:inline-block;padding:2px 8px;border-radius:6px;background:#EEEDFE;color:#3C3489;font-size:11px;font-weight:700;margin-top:3px">מנהל מערכת</div>`:''}</div>
       <button onclick="doLogout()" style="padding:6px 12px;background:#fff;border:2px solid #C8C6BE;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#555">יציאה</button>
     </div>
-    <div class="card" style="margin-bottom:14px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:8px">🔑 מפתח Anthropic API</div>
-      <div style="font-size:12px;color:#666;margin-bottom:8px">נדרש לניתוח אריזות ולחיפוש AI. <a href="https://console.anthropic.com/keys" target="_blank" style="color:#3C3489;font-weight:700">קבל מפתח</a></div>
+    <div class="card" style="margin-bottom:14px;border:1.5px solid #3C3489">
+      <div style="font-size:14px;font-weight:700;margin-bottom:6px">🔑 מפתח Anthropic API</div>
+      <div style="font-size:12px;color:#555;margin-bottom:8px">נדרש לחיפוש מתכונים מהאינטרנט. OCR חינמי ללא מפתח! <a href="https://console.anthropic.com/keys" target="_blank" style="color:#3C3489;font-weight:700">קבל מפתח</a></div>
       <input class="fi" id="ak-in" type="password" placeholder="sk-ant-api03-..." value="${ak}" style="margin-bottom:8px">
       <button onclick="saveAK()" class="btn">שמור מפתח</button>
     </div>
@@ -607,7 +782,7 @@ function pgProfile(){
     ${myR.length>0?`<div style="font-size:14px;font-weight:700;margin-bottom:10px">המתכונים שלי (${myR.length})</div>${myR.map(r=>`<div style="background:#fff;border:1px solid #E0DED6;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:13px;font-weight:700">${r.title}</div><div style="font-size:11px;color:#888;margin-top:2px">${r.approved?'✅ מאושר':'⏳ ממתין לאישור'}</div></div>${r.approved?`<button onclick="showRecipe('${r.id}')" style="padding:5px 10px;background:#1A1A18;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">צפה</button>`:''}</div>`).join('')}`:''}
   </div>`);
 }
-function saveAK(){const v=document.getElementById('ak-in').value.trim();LS.set('anthropic_key',v);alert(v?'✅ מפתח נשמר בהצלחה!':'מפתח נמחק');}
+function saveAK(){const v=document.getElementById('ak-in')?.value.trim();if(v!==undefined){LS.set('anthropic_key',v);alert(v?'✅ מפתח נשמר!':'מפתח נמחק');}}
 function admPanel(pend){
   return`<div style="background:#EEEDFE;border:2px solid #7F77DD;border-radius:12px;padding:14px;margin-bottom:14px">
     <div style="font-size:15px;font-weight:700;color:#3C3489;margin-bottom:12px">🛡 פאנל ניהול</div>
@@ -618,27 +793,15 @@ function admPanel(pend){
     </div>
   </div>`;
 }
-function apprR(id,ok){
-  const recs=gR();const r=recs.find(x=>x.id===id);if(!r)return;
-  if(ok){r.approved=true;sR(recs);alert(`✅ "${r.title}" אושר ופורסם!`);}
-  else{recs.splice(recs.indexOf(r),1);sR(recs);alert(`✗ "${r.title}" נדחה ונמחק`);}
-  pgProfile();
-}
-function delU(id){if(!confirm('למחוק משתמש זה?'))return;sU(gU().filter(u=>u.id!==id));pgProfile();}
-function doLogin(){
-  const e=document.getElementById('li-e').value.trim();
-  const p=document.getElementById('li-p').value;
-  const u=gU().find(u=>u.email===e&&u.pass===p);
-  const err=document.getElementById('li-err');
-  if(!u){err.style.display='block';err.textContent='אימייל או סיסמה שגויים';return;}
-  CU=u;LS.set('cu',CU);pgProfile();
-}
+function apprR(id,ok){const recs=gR();const r=recs.find(x=>x.id===id);if(!r)return;if(ok){r.approved=true;sR(recs);alert(`✅ "${r.title}" אושר!`);}else{recs.splice(recs.indexOf(r),1);sR(recs);alert(`✗ "${r.title}" נדחה`);}pgProfile();}
+function delU(id){if(!confirm('למחוק משתמש?'))return;sU(gU().filter(u=>u.id!==id));pgProfile();}
+function doLogin(){const e=document.getElementById('li-e')?.value.trim(),p=document.getElementById('li-p')?.value;const u=gU().find(u=>u.email===e&&u.pass===p);const err=document.getElementById('li-err');if(!u){if(err){err.style.display='block';err.textContent='אימייל או סיסמה שגויים';}return;}CU=u;LS.set('cu',CU);pgProfile();}
 function doLogout(){CU=null;LS.set('cu',null);pgProfile();}
 
 // ── PWA ──
 let _dp=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dp=e;});
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js'));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 
 // ── BOOT ──
 setAct('home');pgHome();
