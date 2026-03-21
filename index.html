@@ -367,7 +367,7 @@ function _rRec(){
   const curR=r.ratings&&CU?r.ratings[CU.id]||0:0;
 
   const backLabel=isPreview?'חיפוש':r.cat;
-  const backFn=isPreview?`backToSearch():`showCat('${r.cat}')`;
+  const backFn=isPreview?'backToSearch()':("showCat('"+r.cat+"')");
   nav(backLabel,isPreview?'backToSearch()':(`showCat('${r.cat}')`),null);
 
   if(S.lb){rnd2(`<div onclick="S.lb=false;_rRec()" style="min-height:460px;overflow:hidden;position:relative;cursor:pointer">${gi(r.id,400,460,'height:460px;')}<div style="position:absolute;bottom:0;right:0;left:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:24px 18px 20px"><div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:5px">${r.title}</div><div style="font-size:12px;color:rgba(255,255,255,.9);line-height:1.6">${r.desc||''}</div>${ms?`<div style="margin-top:10px;display:inline-block;padding:4px 12px;background:rgba(255,255,255,.15);border-radius:20px;font-size:12px;color:#F9CB42;font-weight:700">${ms} ${nm}</div>`:''}</div><div style="position:absolute;top:16px;right:16px;padding:6px 12px;background:rgba(0,0,0,.5);border-radius:8px;color:#fff;font-size:12px;font-weight:700">× סגור</div></div>`);return;}
