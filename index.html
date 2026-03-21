@@ -126,277 +126,198 @@ const fmt=(v,s)=>Math.round(v/s);
 const fmtD=(v,s)=>Math.round(v/s*10)/10;
 const gAK=()=>LS.get('anthropic_key','');
 
-function initDB(){if(LS.get('dbi')!==6){LS.set('users',SEED_USERS);LS.set('recs',SEED_RECIPES);LS.set('dbi',6);}}
+// ══════════════════════════════════════════
+//  GITHUB SYNC
+//  Read: public raw.githubusercontent (no auth)
+//  Write: GitHub API with Personal Access Token
+// ══════════════════════════════════════════
+const GH={
+  owner: ()=>LS.get('gh_owner','GilReshef'),
+  repo:  ()=>LS.get('gh_repo','taamim'),
+  token: ()=>LS.get('gh_token',''),
+  file:  'data/community_recipes.json',
+
+  rawUrl(){
+    return `https://raw.githubusercontent.com/${this.owner()}/${this.repo()}/main/${this.file}?t=${Date.now()}`;
+  },
+  apiUrl(){
+    return `https://api.github.com/repos/${this.owner()}/${this.repo()}/contents/${this.file}`;
+  },
+
+  // Fetch community recipes from GitHub (no auth needed for public repo)
+  async fetchCommunity(){
+    try{
+      const r=await fetch(this.rawUrl(),{cache:'no-store'});
+      if(!r.ok)return [];
+      const data=await r.json();
+      return Array.isArray(data)?data:[];
+    }catch{return [];}
+  },
+
+  // Push a recipe to GitHub (requires PAT token)
+  async pushRecipe(recipe){
+    const token=this.token();
+    if(!token)throw new Error('אין מפתח GitHub. הגדר בפרופיל → הגדרות GitHub.');
+
+    // First get current file SHA + content
+    const headers={'Authorization':'token '+token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+    let sha=null,existing=[];
+    try{
+      const r=await fetch(this.apiUrl(),{headers});
+      if(r.ok){
+        const d=await r.json();
+        sha=d.sha;
+        existing=JSON.parse(atob(d.content.replace(/\n/g,'')));
+      }
+    }catch{}
+
+    // Add new recipe (avoid duplicates)
+    if(!existing.find(x=>x.id===recipe.id))existing.push(recipe);
+
+    const body={
+      message:`הוספת מתכון: ${recipe.title}`,
+      content:btoa(unescape(encodeURIComponent(JSON.stringify(existing,null,2)))),
+      ...(sha?{sha}:{})
+    };
+    const res=await fetch(this.apiUrl(),{method:'PUT',headers,body:JSON.stringify(body)});
+    if(!res.ok){const e=await res.json();throw new Error(e.message||'GitHub error '+res.status);}
+    return true;
+  }
+};
+
+// DB init
+function initDB(){if(LS.get('dbi')!==7){LS.set('users',SEED_USERS);LS.set('recs',SEED_RECIPES);LS.set('dbi',7);}}
 initDB();
 const gU=()=>LS.get('users',[]);
 const gR=()=>LS.get('recs',[]);
 const sR=r=>LS.set('recs',r);
 const sU=u=>LS.set('users',u);
-const appR=()=>gR().filter(r=>r.approved);
+const localAppR=()=>gR().filter(r=>r.approved);
+
+// Merge local + community recipes
+let _communityRecs=LS.get('community_recs',[]);
+function allAppR(){
+  const local=localAppR();
+  const localIds=new Set(local.map(r=>r.id));
+  const extra=_communityRecs.filter(r=>r.approved&&!localIds.has(r.id));
+  return [...local,...extra];
+}
+
+// Load community recipes from GitHub on startup
+async function syncFromGitHub(){
+  const sync=document.getElementById('sync-status');
+  if(sync)sync.textContent='🔄 מסנכרן...';
+  try{
+    const community=await GH.fetchCommunity();
+    if(community.length>0){
+      _communityRecs=community;
+      LS.set('community_recs',community);
+      if(sync)sync.textContent=`✅ ${community.length} מתכונים מהקהילה`;
+      // Refresh home if visible
+      if(S.tab==='home')pgHome();
+    }else{
+      if(sync)sync.textContent='';
+    }
+  }catch{
+    if(sync)sync.textContent='';
+  }
+}
 
 let CU=LS.get('cu',null);
 let S={tab:'home',rid:null,cat:null,sub:null,alts:{},sug:false,sv:1,rtab:'ings',lb:false,
+  previewRecipe:null,// recipe being previewed from search (not yet added)
   scan:{name:'',carbs:'',prot:'',fat:'',grams:'100',result:null,demoIdx:-1,img:null,ocrRunning:false,err:''},
   sf:{title:'',chefName:'',cat:'ראשונות',sub:'',diff:1,time:30,steps:[''],ings:[{n:'',q:'',g:'',cal:''}]},
   sfE:'',sfOk:false,
   srch:'',srchLoading:false,srchResult:null,srchStatus:''};
 
 // ══════════════════════════════════════════
-//  FREE TRANSLATION — MyMemory API (no key!)
-//  + built-in food dictionary for instant results
+//  TRANSLATION (Hebrew ↔ English, free)
 // ══════════════════════════════════════════
-
-// Large Hebrew→English food dictionary — instant, offline
-const HE_EN_DICT={
-  // proteins
-  'עוף':'chicken','חזה עוף':'chicken breast','ירך עוף':'chicken thigh','כנפי עוף':'chicken wings',
-  'בשר':'beef','בשר בקר':'beef','אנטרקוט':'entrecote','סינטה':'sirloin','פילה':'fillet',
-  'כבש':'lamb','טלה':'lamb','חזיר':'pork','דג':'fish','סלמון':'salmon','טונה':'tuna',
-  'שרימפס':'shrimp','קלמארי':'calamari','סול':'sole fish','דג בס':'sea bass',
-  'ביצים':'eggs','ביצה':'egg','גבינה':'cheese','יוגורט':'yogurt',"קוטג'":'cottage cheese',
-  // grains
-  'אורז':'rice','פסטה':'pasta','ספגטי':'spaghetti','לחם':'bread','קמח':'flour',
-  'פתיתים':'couscous','בורגול':'bulgur','קינואה':'quinoa','שיבולת שועל':'oatmeal',
-  // vegetables
-  'בצל':'onion','שום':'garlic','עגבניה':'tomato','עגבניות':'tomatoes',
-  'גזר':'carrot','תפוח אדמה':'potato','ברוקולי':'broccoli','תרד':'spinach',
-  'חסה':'lettuce','מלפפון':'cucumber','פלפל':'bell pepper','חצילים':'eggplant',
-  'קישואים':'zucchini','כרוב':'cabbage','פטריות':'mushrooms','אספרגוס':'asparagus',
-  'ארטישוק':'artichoke','סלק':'beet','גמבה':'red pepper','דלעת':'pumpkin',
-  'אבוקדו':'avocado','תירס':'corn',
-  // fruits
-  'תפוח':'apple','בננה':'banana','לימון':'lemon','תפוז':'orange','תות':'strawberry',
-  'אניה':'pear','מנגו':'mango','אנגור':'grape',
-  // dairy
-  'חלב':'milk','שמנת':'cream','חמאה':'butter','שמן':'oil','שמן זית':'olive oil',
-  'שמן קוקוס':'coconut oil',
-  // herbs & spices
-  'כמון':'cumin','כורכום':'turmeric','פפריקה':'paprika','קינמון':'cinnamon',
-  'זעתר':'thyme','רוזמרין':'rosemary','בזיל':'basil','פטרוזיליה':'parsley',
-  'כוסברה':'coriander','שמיר':'dill','מנטה':'mint','עשבי תיבול':'herbs',
-  // cooking methods / dishes
-  'מרק':'soup','מרק עוף':'chicken soup','מרק בצל':'onion soup','מרק עגבניות':'tomato soup',
-  'מרק ירקות':'vegetable soup','מרק פטריות':'mushroom soup',
-  'סלט':'salad','סלט ירוק':'green salad','סלט עגבניות':'tomato salad',
-  'עוגה':'cake','עוגיות':'cookies','גלידה':'ice cream','שוקולד':'chocolate',
-  'ריזוטו':'risotto','פיצה':'pizza','סושי':'sushi','ברגר':'burger',
-  'שניצל':'schnitzel','קציצות':'meatballs','שקשוקה':'shakshuka',
-  'חומוס':'hummus','פלאפל':'falafel','שווארמה':'shawarma','טחינה':'tahini',
-  'פנקייק':'pancakes','וופל':'waffle','קרפ':'crepe','בורקס':'burekas',
-  'לזניה':'lasagna','קרם':'cream','מוס':'mousse','טירמיסו':'tiramisu',
-  'בסבוסה':'semolina cake','קנאפה':'kanafeh','בקלווה':'baklava',
-  // cooking terms
-  'בישול':'cooking','טיגון':'frying','אפייה':'baking','צלייה':'grilling',
-  'תנור':'oven','מחבת':'pan','סיר':'pot',
-};
-
-// English→Hebrew ingredient names (for translated results)
-const EN_HE_INGS={
-  'chicken breast':'חזה עוף','chicken thigh':'ירך עוף','chicken':'עוף',
-  'beef':'בשר בקר','ground beef':'בשר טחון','steak':'סטייק',
-  'lamb':'כבש','pork':'חזיר','bacon':'בייקון',
-  'salmon':'סלמון','tuna':'טונה','shrimp':'שרימפס','cod':'בקלה',
-  'sea bass':'דג בס','sole':'סול','trout':'פורל',
-  'egg':'ביצה','eggs':'ביצים','butter':'חמאה','cream':'שמנת',
-  'milk':'חלב','cheese':'גבינה','parmesan':'פרמזן','mozzarella':'מוצרלה',
-  'olive oil':'שמן זית','vegetable oil':'שמן צמחי','coconut oil':'שמן קוקוס',
-  'flour':'קמח','sugar':'סוכר','salt':'מלח','pepper':'פלפל שחור',
-  'onion':'בצל','garlic':'שום','tomato':'עגבנייה','tomatoes':'עגבניות',
-  'potato':'תפוח אדמה','potatoes':'תפוחי אדמה','carrot':'גזר','carrots':'גזרים',
-  'rice':'אורז','pasta':'פסטה','spaghetti':'ספגטי','bread':'לחם',
-  'mushroom':'פטרייה','mushrooms':'פטריות','spinach':'תרד','broccoli':'ברוקולי',
-  'lemon':'לימון','orange':'תפוז','apple':'תפוח','banana':'בננה',
-  'tomato sauce':'רוטב עגבניות','cream sauce':'רוטב שמנת',
-  'white wine':'יין לבן','red wine':'יין אדום','broth':'ציר',
-  'chicken broth':'ציר עוף','vegetable broth':'ציר ירקות','beef broth':'ציר בקר',
-  'thyme':'טימין','rosemary':'רוזמרין','basil':'בזיל','parsley':'פטרוזיליה',
-  'coriander':'כוסברה','cumin':'כמון','turmeric':'כורכום','paprika':'פפריקה',
-  'cinnamon':'קינמון','oregano':'אורגנו','bay leaf':'עלה דפנה',
-  'soy sauce':'רוטב סויה','honey':'דבש','lemon juice':'מיץ לימון',
-  'olive':'זיתים','capers':'קייפרס','anchovies':'אנשובי',
-  'chocolate':'שוקולד','cocoa':'קקאו','vanilla':'וניל',
-  'baking powder':'אבקת אפייה','yeast':'שמרים','cornstarch':'קמח תירס',
-  'almonds':'שקדים','walnuts':'אגוזי מלך','cashews':'קשיו',
-};
-
-// Hebrew category map for TheMealDB results
+const HE_EN_DICT={'עוף':'chicken','חזה עוף':'chicken breast','ירך עוף':'chicken thigh','כנפי עוף':'chicken wings','בשר':'beef','בשר בקר':'beef','אנטרקוט':'entrecote','סינטה':'sirloin','כבש':'lamb','דג':'fish','סלמון':'salmon','טונה':'tuna','שרימפס':'shrimp','ביצים':'eggs','ביצה':'egg','מרק':'soup','מרק עוף':'chicken soup','מרק בצל':'onion soup','מרק עגבניות':'tomato soup','מרק ירקות':'vegetable soup','מרק פטריות':'mushroom soup','סלט':'salad','סלט ירוק':'green salad','עוגה':'cake','שוקולד':'chocolate','ריזוטו':'risotto','פיצה':'pizza','פסטה':'pasta','ספגטי':'spaghetti','שקשוקה':'shakshuka','חומוס':'hummus','פלאפל':'falafel','טחינה':'tahini','לזניה':'lasagna','טירמיסו':'tiramisu','קרם ברולה':'creme brulee','בקלווה':'baklava','אורז':'rice','לחם':'bread','קמח':'flour','סוכר':'sugar','בצל':'onion','שום':'garlic','עגבניה':'tomato','עגבניות':'tomatoes','גזר':'carrot','תפוח אדמה':'potato','ברוקולי':'broccoli','תרד':'spinach','פטריות':'mushrooms','אבוקדו':'avocado','גבינה':'cheese','חלב':'milk','שמנת':'cream','חמאה':'butter','שמן זית':'olive oil','כמון':'cumin','כורכום':'turmeric','פפריקה':'paprika','בזיל':'basil','פטרוזיליה':'parsley','עוף בתנור':'roast chicken','עוף צלוי':'grilled chicken','בשר טחון':'ground beef','קציצות':'meatballs','שניצל':'schnitzel','סטייק':'steak','עגל':'veal','ברווז':'duck','אווז':'goose','הודו':'turkey','חזה':'breast','ירך':'thigh'};
+const EN_HE_INGS={'chicken breast':'חזה עוף','chicken thigh':'ירך עוף','chicken':'עוף','beef':'בשר בקר','ground beef':'בשר טחון','steak':'סטייק','lamb':'כבש','pork':'חזיר','bacon':'בייקון','salmon':'סלמון','tuna':'טונה','shrimp':'שרימפס','cod':'בקלה','sea bass':'דג בס','egg':'ביצה','eggs':'ביצים','butter':'חמאה','cream':'שמנת','milk':'חלב','cheese':'גבינה','parmesan':'פרמזן','mozzarella':'מוצרלה','olive oil':'שמן זית','vegetable oil':'שמן צמחי','flour':'קמח','sugar':'סוכר','salt':'מלח','pepper':'פלפל שחור','onion':'בצל','garlic':'שום','tomato':'עגבנייה','tomatoes':'עגבניות','potato':'תפוח אדמה','potatoes':'תפוחי אדמה','carrot':'גזר','carrots':'גזרים','rice':'אורז','pasta':'פסטה','spaghetti':'ספגטי','bread':'לחם','mushroom':'פטרייה','mushrooms':'פטריות','spinach':'תרד','broccoli':'ברוקולי','lemon':'לימון','orange':'תפוז','apple':'תפוח','banana':'בננה','tomato sauce':'רוטב עגבניות','white wine':'יין לבן','red wine':'יין אדום','chicken broth':'ציר עוף','vegetable broth':'ציר ירקות','beef broth':'ציר בקר','thyme':'טימין','rosemary':'רוזמרין','basil':'בזיל','parsley':'פטרוזיליה','coriander':'כוסברה','cumin':'כמון','turmeric':'כורכום','paprika':'פפריקה','cinnamon':'קינמון','oregano':'אורגנו','bay leaf':'עלה דפנה','soy sauce':'רוטב סויה','honey':'דבש','lemon juice':'מיץ לימון','chocolate':'שוקולד','cocoa':'קקאו','vanilla':'וניל','almonds':'שקדים','walnuts':'אגוזי מלך'};
 const MEAL_CAT={Chicken:'עיקריות',Beef:'עיקריות',Lamb:'עיקריות',Pork:'עיקריות',Seafood:'עיקריות',Pasta:'עיקריות',Vegetarian:'עיקריות',Vegan:'עיקריות',Dessert:'קינוחים',Starter:'ראשונות',Side:'מהירי הכנה',Soup:'מרקים',Salad:'סלטים',Breakfast:'מהירי הכנה',Miscellaneous:'עיקריות'};
 const MEAL_SUB={Chicken:'עוף',Beef:'בשר',Lamb:'בשר',Seafood:'דגים'};
 const AREA_CHEF={Italian:'מסימו בוטורה',French:'אלן דוקאס',Japanese:'נובו מטסוהיסה',Spanish:'פרן אדריא',British:'גורדון רמזי',American:'תומס קלר'};
-
-// Detect if text is Hebrew
 const isHebrew=t=>/[\u05D0-\u05EA]/.test(t);
 
-// Translate using MyMemory free API
-async function myMemoryTranslate(text, from, to){
-  try{
-    const url=`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
-    const r=await fetch(url,{mode:'cors'});
-    const d=await r.json();
-    const t=d?.responseData?.translatedText||'';
-    // MyMemory sometimes returns the original if it can't translate
-    if(t&&t.toLowerCase()!==text.toLowerCase())return t;
-    return text;
-  }catch{return text;}
+async function myMemoryTranslate(text,from,to){
+  try{const r=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`,{mode:'cors'});const d=await r.json();const t=d?.responseData?.translatedText||'';if(t&&t.toLowerCase()!==text.toLowerCase())return t;return text;}catch{return text;}
 }
-
-// Translate Hebrew query → English for TheMealDB
 async function hebrewToEnglish(query){
   const q=query.trim().toLowerCase();
-  // 1. Exact dictionary match
   if(HE_EN_DICT[q])return HE_EN_DICT[q];
-  // 2. Partial match in dictionary
-  for(const [he,en] of Object.entries(HE_EN_DICT)){
-    if(q.includes(he)||he.includes(q))return en;
-  }
-  // 3. Not Hebrew → return as-is
+  for(const[he,en]of Object.entries(HE_EN_DICT)){if(q.includes(he)||he.includes(q))return en;}
   if(!isHebrew(query))return query;
-  // 4. Use MyMemory translation
-  const translated=await myMemoryTranslate(query,'he','en');
-  return translated;
+  return await myMemoryTranslate(query,'he','en');
 }
+function translateIngredient(name){const n=name.toLowerCase().trim();if(EN_HE_INGS[n])return EN_HE_INGS[n];for(const[en,he]of Object.entries(EN_HE_INGS)){if(n.includes(en))return he;}return name;}
+async function translateSteps(steps){const results=[];for(const step of steps){if(!step.trim()){results.push(step);continue;}try{const t=await myMemoryTranslate(step,'en','he');results.push(t||step);}catch{results.push(step);}await new Promise(r=>setTimeout(r,80));}return results;}
+async function translateTitle(text){if(!text)return text;const c=LS.get('tr_'+text,null);if(c)return c;const t=await myMemoryTranslate(text,'en','he');LS.set('tr_'+text,t);return t;}
+function estimateCal(n,q){const nl=n.toLowerCase();if(/flour|sugar/.test(nl))return 70;if(/butter|oil/.test(nl))return 110;if(/chicken|beef|lamb|pork/.test(nl))return 100;if(/egg/.test(nl))return 70;if(/milk|cream/.test(nl))return 35;return 40;}
+function estimateCarbs(n){const nl=n.toLowerCase();if(/flour|pasta|rice|sugar|bread/.test(nl))return 15;if(/potato/.test(nl))return 12;return 3;}
+function estimateFat(n){const nl=n.toLowerCase();if(/butter|oil|cream/.test(nl))return 12;if(/cheese/.test(nl))return 8;return 2;}
 
-// Translate ingredient name en→he using dictionary or API
-function translateIngredient(name){
-  const n=name.toLowerCase().trim();
-  if(EN_HE_INGS[n])return EN_HE_INGS[n];
-  // partial match
-  for(const [en,he] of Object.entries(EN_HE_INGS)){
-    if(n.includes(en))return he;
-  }
-  return name; // keep original if not found
-}
-
-// Batch translate steps (en→he) using MyMemory
-// Split into chunks to reduce API calls
-async function translateSteps(steps){
-  const results=[];
-  for(const step of steps){
-    if(!step.trim()){results.push(step);continue;}
-    try{
-      const translated=await myMemoryTranslate(step,'en','he');
-      results.push(translated||step);
-    }catch{results.push(step);}
-    // Small delay to avoid rate limiting
-    await new Promise(r=>setTimeout(r,100));
-  }
-  return results;
-}
-
-// Translate meal title and description
-async function translateTitle(text){
-  if(!text)return text;
-  const cached=LS.get('tr_'+text,null);
-  if(cached)return cached;
-  const t=await myMemoryTranslate(text,'en','he');
-  LS.set('tr_'+text,t);
-  return t;
-}
-
-// Convert TheMealDB meal → Hebrew recipe object
-async function mealToHebrew(m, statusCb){
-  statusCb('מתרגם שם המתכון...');
+async function mealToHebrew(m,statusCb){
+  statusCb('מתרגם שם...');
   const title=await translateTitle(m.strMeal);
-
-  statusCb('מתרגם תיאור...');
-  const rawDesc=`${m.strMeal} — ${m.strArea||''} ${m.strCategory||''}. מקור: The Meal DB.`;
-
-  // Ingredients — use dictionary first, then API for unknowns
   const ings=[];
-  for(let i=1;i<=20;i++){
-    const n=(m[`strIngredient${i}`]||'').trim();
-    const q=(m[`strMeasure${i}`]||'').trim();
-    if(!n)break;
-    const hebrewName=translateIngredient(n);
-    ings.push({n:hebrewName,q,g:'',cal:estimateCal(n,q),p:0,c:estimateCarbs(n),f:estimateFat(n),fb:0});
-  }
-
-  // Instructions → split into steps → translate
-  const rawInstructions=(m.strInstructions||'').replace(/\r\n/g,'\n');
-  const rawSteps=rawInstructions
-    .split(/(?<=[.!?])\s+|\n{2,}/)
-    .map(s=>s.replace(/\n/g,' ').trim())
-    .filter(s=>s.length>15)
-    .slice(0,8);
-
+  for(let i=1;i<=20;i++){const n=(m[`strIngredient${i}`]||'').trim();const q=(m[`strMeasure${i}`]||'').trim();if(!n)break;ings.push({n:translateIngredient(n),q,g:'',cal:estimateCal(n,q),p:0,c:estimateCarbs(n),f:estimateFat(n),fb:0});}
+  const rawSteps=(m.strInstructions||'').replace(/\r\n/g,'\n').split(/(?<=[.!?])\s+|\n{2,}/).map(s=>s.replace(/\n/g,' ').trim()).filter(s=>s.length>15).slice(0,8);
   statusCb('מתרגם שלבי הכנה...');
   const hebrewSteps=await translateSteps(rawSteps);
-
   const cat=MEAL_CAT[m.strCategory]||'עיקריות';
   const sub=MEAL_SUB[m.strCategory]||null;
   const chefName=AREA_CHEF[m.strArea]||null;
   const time=cat==='קינוחים'?60:cat==='מרקים'?45:Math.max(20,rawSteps.length*8);
-
-  return {
-    id:'meal_'+m.idMeal+'_'+Date.now(),
-    title,chefName,chef:null,
-    michelin:chefName?1:0,
-    cat,sub,diff:cat==='קינוחים'?2:1,time,quick:time<=25,
-    rating:4.5,rc:50,approved:false,userR:false,ratings:{},
-    desc:rawDesc,source:'TheMealDB',
-    steps:hebrewSteps,ings
-  };
+  return{id:'meal_'+m.idMeal+'_'+Date.now(),title,chefName,chef:null,michelin:chefName?1:0,cat,sub,diff:cat==='קינוחים'?2:1,time,quick:time<=25,rating:4.5,rc:50,approved:true,userR:false,ratings:{},desc:`${title} — מתכון מ-TheMealDB, מתורגם לעברית.`,source:'TheMealDB',steps:hebrewSteps,ings};
 }
-
-function estimateCal(n,q){const nl=n.toLowerCase();if(/flour|sugar/.test(nl))return 70;if(/butter|oil/.test(nl))return 110;if(/chicken|beef|lamb|pork/.test(nl))return 100;if(/egg/.test(nl))return 70;if(/milk|cream/.test(nl))return 35;return 40;}
-function estimateCarbs(n){const nl=n.toLowerCase();if(/flour|pasta|rice|sugar|bread/.test(nl))return 15;if(/potato/.test(nl))return 12;return 3;}
-function estimateFat(n){const nl=n.toLowerCase();if(/butter|oil|cream/.test(nl))return 12;if(/cheese/.test(nl))return 8;return 2;}
 
 // ══════════════════════════════════════════
 //  CANVAS FOOD ART
 // ══════════════════════════════════════════
 const IC={};
-function gi(id,w,h,s=''){
-  const k=`${id}_${w}_${h}`;
-  if(!IC[k]){const c=document.getElementById('ofc');if(!c)return'';c.width=w;c.height=h;drawF(c.getContext('2d'),id,w,h);IC[k]=c.toDataURL('image/jpeg',0.85);}
-  return `<img src="${IC[k]}" style="width:100%;height:100%;object-fit:cover;${s}">`;
-}
+function gi(id,w,h,s=''){const k=`${id}_${w}_${h}`;if(!IC[k]){const c=document.getElementById('ofc');if(!c)return'';c.width=w;c.height=h;drawF(c.getContext('2d'),id,w,h);IC[k]=c.toDataURL('image/jpeg',0.85);}return`<img src="${IC[k]}" style="width:100%;height:100%;object-fit:cover;${s}">`;}
 function rnd(a,b){return a+Math.random()*(b-a);}
 function vig(ctx,w,h){const g=ctx.createRadialGradient(w/2,h/2,h*.12,w/2,h/2,h*.9);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.65)');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);}
 function wood(ctx,w,h){const bg=ctx.createLinearGradient(0,0,w,h);bg.addColorStop(0,'#4a2e12');bg.addColorStop(1,'#1e1008');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);for(let i=0;i<14;i++){ctx.beginPath();ctx.moveTo(0,rnd(0,h));ctx.bezierCurveTo(w*.3,rnd(-8,8)+i*h/14,w*.7,rnd(-6,6)+i*h/14,w,rnd(-4,4)+i*h/14);ctx.strokeStyle=`rgba(0,0,0,${rnd(.06,.18)})`;ctx.lineWidth=rnd(.5,2);ctx.stroke();}}
 function plate(ctx,cx,cy,rx,ry){const pg=ctx.createRadialGradient(cx-rx*.2,cy-ry*.25,0,cx,cy,rx*1.05);pg.addColorStop(0,'#f8f4ee');pg.addColorStop(.6,'#ede8e0');pg.addColorStop(1,'#c8c0b0');ctx.beginPath();ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);ctx.fillStyle=pg;ctx.fill();ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=2;ctx.stroke();}
-function drawF(ctx,id,w,h){
-  wood(ctx,w,h);
-  ctx.save();ctx.globalAlpha=0.22;const g2=ctx.createLinearGradient(w*.8,0,w*.3,h);g2.addColorStop(0,'rgba(255,240,180,.7)');g2.addColorStop(.5,'rgba(255,230,150,.2)');g2.addColorStop(1,'rgba(255,220,120,0)');ctx.fillStyle=g2;ctx.beginPath();ctx.moveTo(w*.7,-5);ctx.lineTo(w*1.2,-5);ctx.lineTo(w*.4,h+5);ctx.lineTo(0,h+5);ctx.fill();ctx.restore();
-  plate(ctx,w/2,h*.54,w*.4,h*.3);
-  const sg=ctx.createRadialGradient(w/2,h*.58,0,w/2,h*.56,w*.3);sg.addColorStop(0,'rgba(200,180,100,.45)');sg.addColorStop(1,'rgba(200,180,100,0)');ctx.beginPath();ctx.ellipse(w/2,h*.56,w*.3,h*.18,0,0,Math.PI*2);ctx.fillStyle=sg;ctx.fill();
-  ctx.font=`${h*.32}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(FEMS[id]||'🍽',w/2,h*.46);
-  for(let i=0;i<10;i++){ctx.beginPath();ctx.arc(w/2+rnd(-w*.22,w*.22),h*.5+rnd(-h*.15,h*.15),rnd(1.5,3),0,Math.PI*2);ctx.fillStyle=`rgba(60,140,40,${rnd(.4,.8)})`;ctx.fill();}
-  vig(ctx,w,h);
-}
+function drawF(ctx,id,w,h){wood(ctx,w,h);ctx.save();ctx.globalAlpha=0.22;const g2=ctx.createLinearGradient(w*.8,0,w*.3,h);g2.addColorStop(0,'rgba(255,240,180,.7)');g2.addColorStop(.5,'rgba(255,230,150,.2)');g2.addColorStop(1,'rgba(255,220,120,0)');ctx.fillStyle=g2;ctx.beginPath();ctx.moveTo(w*.7,-5);ctx.lineTo(w*1.2,-5);ctx.lineTo(w*.4,h+5);ctx.lineTo(0,h+5);ctx.fill();ctx.restore();plate(ctx,w/2,h*.54,w*.4,h*.3);const sg=ctx.createRadialGradient(w/2,h*.58,0,w/2,h*.56,w*.3);sg.addColorStop(0,'rgba(200,180,100,.45)');sg.addColorStop(1,'rgba(200,180,100,0)');ctx.beginPath();ctx.ellipse(w/2,h*.56,w*.3,h*.18,0,0,Math.PI*2);ctx.fillStyle=sg;ctx.fill();ctx.font=`${h*.32}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(FEMS[id]||'🍽',w/2,h*.46);for(let i=0;i<10;i++){ctx.beginPath();ctx.arc(w/2+rnd(-w*.22,w*.22),h*.5+rnd(-h*.15,h*.15),rnd(1.5,3),0,Math.PI*2);ctx.fillStyle=`rgba(60,140,40,${rnd(.4,.8)})`;ctx.fill();}vig(ctx,w,h);}
 
 // ══════════════════════════════════════════
-//  RENDER
+//  RENDER HELPERS
 // ══════════════════════════════════════════
 function setAct(t){document.querySelectorAll('.ti').forEach(x=>x.classList.remove('on'));const el=document.getElementById('t-'+t);if(el)el.classList.add('on');}
-function nav(back,bFn,mid){document.getElementById('tnav').innerHTML=`<div class="tnav">${back?`<button class="bb" onclick="${bFn}">← ${back}</button>`:`<div class="logo">טע<span>מ</span>ים</div>`}<span style="font-size:13px;font-weight:700;color:#555">${mid||''}</span><span></span></div>`;}
+function nav(back,bFn,mid,right=''){document.getElementById('tnav').innerHTML=`<div class="tnav">${back?`<button class="bb" onclick="${bFn}">← ${back}</button>`:`<div class="logo">טע<span>מ</span>ים</div>`}<span style="font-size:13px;font-weight:700;color:#555">${mid||''}</span>${right||'<span></span>'}</div>`;}
 function rnd2(html){const el=document.getElementById('scr');el.innerHTML=html;el.scrollTop=0;}
-function gTab(t,o={}){S.tab=t;Object.assign(S,o);setAct(t);
-  if(t==='home')pgHome();else if(t==='search')pgSearch();else if(t==='scan')pgScan();else if(t==='add')pgAdd();else if(t==='profile')pgProfile();}
+function gTab(t,o={}){S.tab=t;Object.assign(S,o);setAct(t);if(t==='home')pgHome();else if(t==='search')pgSearch();else if(t==='scan')pgScan();else if(t==='add')pgAdd();else if(t==='profile')pgProfile();}
 
 // ══════════════════════════════════════════
 //  HOME
 // ══════════════════════════════════════════
 function pgHome(){
-  const recs=appR();nav(null,null,null);
+  const recs=allAppR();nav(null,null,null,`<span id="sync-status" style="font-size:10px;color:#888"></span>`);
   rnd2(`<div style="padding:14px 14px 8px"><div style="font-size:22px;font-weight:700">מה מבשלים היום?</div><div style="font-size:12px;color:#888;margin-top:2px">${recs.length} מתכונים · שפי מישלן ומהקהילה</div></div>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 14px">
     ${CATS.map(c=>{const cnt=recs.filter(r=>r.cat===c.name).length;return`<div onclick="showCat('${c.name}')" style="background:${c.bg};border-radius:14px;padding:16px 8px 13px;cursor:pointer;text-align:center"><div style="font-size:28px;margin-bottom:7px">${c.em}</div><div style="font-size:13px;font-weight:700;color:${c.ft}">${c.name}</div><div style="font-size:11px;color:${c.ft};opacity:.85;margin-top:3px">${cnt}</div></div>`;}).join('')}
   </div>
   <div style="padding:12px 14px 4px;font-size:14px;font-weight:700">מומלצים</div>
   ${recs.slice(0,6).map(r=>rCard(r)).join('')}`);
+  // Sync in background
+  syncFromGitHub();
 }
 function showCat(cat,sub){
   S.cat=cat;S.sub=sub||null;
   const ci=CATS.find(c=>c.name===cat);
   const hasSub=['עיקריות','קינוחים'].includes(cat);
   const subList=[...new Set(gR().filter(r=>r.cat===cat&&r.sub).map(r=>r.sub))];
-  const recs=appR().filter(r=>r.cat===cat&&(sub?r.sub===sub:true));
+  const recs=allAppR().filter(r=>r.cat===cat&&(sub?r.sub===sub:true));
   nav('ראשי',"gTab('home')",cat);
   rnd2(`<div style="background:${ci.bg};padding:14px 16px;display:flex;align-items:center;gap:12px"><span style="font-size:32px">${ci.em}</span><div><div style="font-size:17px;font-weight:700;color:${ci.ft}">${cat}</div><div style="font-size:11px;color:${ci.ft};opacity:.8">${recs.length} מתכונים</div></div></div>
   ${hasSub?`<div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1.5px solid #E0DED6;background:#fff;overflow-x:auto"><button onclick="showCat('${cat}')" style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${!sub?'#1A1A18':'#C8C6BE'};background:${!sub?'#1A1A18':'#fff'};color:${!sub?'#fff':'#555'};white-space:nowrap">הכל</button>${subList.map(s=>`<button onclick="showCat('${cat}','${s}')" style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${sub===s?'#1A1A18':'#C8C6BE'};background:${sub===s?'#1A1A18':'#fff'};color:${sub===s?'#fff':'#555'};white-space:nowrap">${s}</button>`).join('')}</div>`:''}
   ${recs.length===0?`<div style="padding:40px;text-align:center;color:#888">אין מתכונים עדיין</div>`:recs.map(r=>rCard(r)).join('')}`);
 }
+
 function rCard(r){
   const nm=r.chefName||(CH[r.chef]?.n||'שף אנונימי');
   const ms=r.michelin>0?'★'.repeat(r.michelin)+' ':'';
@@ -419,11 +340,17 @@ function rCard(r){
 }
 
 // ══════════════════════════════════════════
-//  RECIPE DETAIL
+//  RECIPE DETAIL — works for both local & preview
 // ══════════════════════════════════════════
-function showRecipe(id){S.rid=id;S.alts={};S.sug=false;S.sv=1;S.rtab='ings';S.lb=false;_rRec();}
+function showRecipe(id){S.rid=id;S.previewRecipe=null;S.alts={};S.sug=false;S.sv=1;S.rtab='ings';S.lb=false;_rRec();}
+// Show a recipe from search results (not yet saved)
+function previewRecipe(recipe){S.rid=null;S.previewRecipe=recipe;S.alts={};S.sug=false;S.sv=1;S.rtab='ings';S.lb=false;_rRec();}
+
 function _rRec(){
-  const r=gR().find(x=>x.id===S.rid);if(!r)return;
+  const r=S.previewRecipe||(S.rid?[...gR(),..._communityRecs].find(x=>x.id===S.rid):null);
+  if(!r)return;
+  const isPreview=!!S.previewRecipe;
+  const alreadySaved=!isPreview||allAppR().find(x=>x.id===r.id||x.title.toLowerCase()===r.title.toLowerCase());
   const nm=r.chefName||(CH[r.chef]?.n||'שף אנונימי');
   const ms=r.michelin>0?'★'.repeat(r.michelin):'';
   const sv=S.sv;
@@ -438,9 +365,15 @@ function _rRec(){
   const MAC=[['חלבון',tP,'#185FA5'],['פחמימות',tCa,'#854F0B'],['שומן',tF,'#72243E'],['סיבים',tFb,'#085041']];
   const ex=calcEx(tCa,tP,tF);const steps=r.steps||[];
   const curR=r.ratings&&CU?r.ratings[CU.id]||0:0;
-  nav(r.cat,`showCat('${r.cat}')`,null);
+
+  const backLabel=isPreview?'חיפוש':r.cat;
+  const backFn=isPreview?`backToSearch():`showCat('${r.cat}')`;
+  nav(backLabel,isPreview?'backToSearch()':(`showCat('${r.cat}')`),null);
+
   if(S.lb){rnd2(`<div onclick="S.lb=false;_rRec()" style="min-height:460px;overflow:hidden;position:relative;cursor:pointer">${gi(r.id,400,460,'height:460px;')}<div style="position:absolute;bottom:0;right:0;left:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:24px 18px 20px"><div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:5px">${r.title}</div><div style="font-size:12px;color:rgba(255,255,255,.9);line-height:1.6">${r.desc||''}</div>${ms?`<div style="margin-top:10px;display:inline-block;padding:4px 12px;background:rgba(255,255,255,.15);border-radius:20px;font-size:12px;color:#F9CB42;font-weight:700">${ms} ${nm}</div>`:''}</div><div style="position:absolute;top:16px;right:16px;padding:6px 12px;background:rgba(0,0,0,.5);border-radius:8px;color:#fff;font-size:12px;font-weight:700">× סגור</div></div>`);return;}
+
   rnd2(`
+    ${isPreview?`<div style="background:#3C3489;padding:8px 14px;display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:rgba(255,255,255,.9)">🌐 תצוגה מקדימה מהאינטרנט — לא שמור עדיין</span></div>`:''}
     <div onclick="S.lb=true;_rRec()" style="cursor:zoom-in;position:relative;height:175px;overflow:hidden">${gi(r.id,400,175)}<div style="position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.65));pointer-events:none"></div><div style="position:absolute;bottom:10px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-end"><span style="font-size:11px;color:#fff;background:rgba(0,0,0,.5);padding:4px 10px;border-radius:7px;font-weight:700">🔍 להגדלה</span>${ms?`<span style="font-size:11px;color:#F9CB42;background:rgba(0,0,0,.5);padding:4px 10px;border-radius:7px;font-weight:700">${ms} ${nm}</span>`:''}</div></div>
     <div style="padding:12px 14px 10px;border-bottom:1px solid #E8E6DE;background:#fff">
       <div style="font-size:19px;font-weight:700;line-height:1.3;margin-bottom:5px">${r.title}</div>
@@ -460,6 +393,8 @@ function _rRec(){
         </div>
         ${S.rtab==='ings'?`<div style="background:#fff;border-radius:10px;border:1px solid #E8E6DE;padding:12px">${r.ings.map((g,i)=>{const use=g.aN&&S.alts[i];return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #F0EEE6"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${use?g.aN:g.n}</div><div style="font-size:10px;color:#888;margin-top:1px"><span style="background:#F0EEE6;padding:1px 5px;border-radius:5px;font-weight:600">${use?g.aQ:g.q}</span>${g.g?`<span style="margin-right:4px;color:#AAA"> ${g.g}</span>`:''} · ${iget(g,'cal',i,S.alts)} קל'${sv>1?` (${fmt(iget(g,'cal',i,S.alts),sv)} למנה)`:''}</div></div>${g.aN?`<button onclick="S.alts[${i}]=!S.alts[${i}];_rRec()" style="font-size:11px;padding:4px 9px;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:700;border:2px solid ${use?'#3B6D11':'#C8C6BE'};background:${use?'#EAF3DE':'#fff'};color:${use?'#27500A':'#555'};flex-shrink:0">${use?'✓':'חלופה'}</button>`:'<span style="width:50px;flex-shrink:0"></span>'}</div>`;}).join('')}</div>`
         :`<div style="background:#fff;border-radius:10px;border:1px solid #E8E6DE;padding:13px">${steps.map((st,i)=>`<div style="display:flex;gap:10px;margin-bottom:${i<steps.length-1?'13px':'0'}"><div class="sn">${i+1}</div><div style="font-size:13px;line-height:1.65;padding-top:3px">${st}</div></div>`).join('')}</div>`}
+        ${isPreview&&!alreadySaved?`<div style="margin-top:12px"><button onclick="savePreviewRecipe()" style="width:100%;padding:13px;background:#27500A;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">✅ הוסף מתכון זה לאפליקציה</button></div>`:''}
+        ${isPreview&&alreadySaved?`<div style="margin-top:12px;padding:12px;background:#EAF3DE;border-radius:10px;font-size:13px;font-weight:700;color:#27500A;text-align:center">✅ המתכון כבר שמור באפליקציה</div>`:''}
       </div>
       <div>
         <div style="background:#fff;border:1px solid #E8E6DE;border-radius:10px;padding:12px">
@@ -485,14 +420,41 @@ function _rRec(){
           <button onclick="S.sug=!S.sug;_rRec()" style="width:100%;padding:6px;font-size:11px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;border:2px solid ${S.sug?'#3B6D11':'#C8C6BE'};background:${S.sug?'#EAF3DE':'#fff'};color:${S.sug?'#27500A':'#555'}">${S.sug?'▲ סגור':'▼ חלופות'}</button>
           ${S.sug?`<div style="margin-top:7px">${sug.length?sug.map(g=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #F0EEE6"><div><div style="font-size:11px;font-weight:700">${g.aN}</div><div style="font-size:9px;color:#888">במקום ${g.n}</div></div><span style="font-size:10px;color:#27500A;background:#EAF3DE;padding:2px 6px;border-radius:7px;direction:ltr;font-weight:700">–${g.cal-g.aC}</span></div>`).join(''):`<div style="font-size:11px;color:#888;padding:3px 0">כל החלופות מופעלות ✓</div>`}</div>`:''}
         </div>
-        <div style="margin-top:8px;background:#fff;border:1px solid #E8E6DE;border-radius:10px;padding:10px">
+        ${!isPreview?`<div style="margin-top:8px;background:#fff;border:1px solid #E8E6DE;border-radius:10px;padding:10px">
           <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:2px">דרג</div>
           <div style="font-size:10px;color:#888;margin-bottom:5px">${r.rc||0} דירוגים · ${r.rating||0}</div>
           <div style="display:flex;direction:ltr;gap:1px">${[1,2,3,4,5].map(n=>`<button onclick="rateR('${r.id}',${n})" style="background:none;border:none;font-size:26px;cursor:pointer;color:${n<=curR?'#BA7517':'#DDD'};padding:0 1px;line-height:1">★</button>`).join('')}</div>
-        </div>
+        </div>`:''}
       </div>
     </div>`);
 }
+
+function backToSearch(){S.previewRecipe=null;S.srchResult=S.srchResult||null;pgSearch();}
+
+// Save a previewed recipe to local + GitHub
+async function savePreviewRecipe(){
+  const r=S.previewRecipe;if(!r)return;
+  if(allAppR().find(x=>x.id===r.id||x.title.toLowerCase()===r.title.toLowerCase())){alert(`"${r.title}" כבר קיים!`);return;}
+  r.approved=true;
+  // Save locally
+  const recs=gR();recs.push(r);sR(recs);
+  // Push to GitHub
+  const token=GH.token();
+  if(token){
+    try{
+      const btn=document.querySelector('button[onclick="savePreviewRecipe()"]');
+      if(btn){btn.textContent='⏳ שומר ומסנכרן ל-GitHub...';btn.disabled=true;}
+      await GH.pushRecipe(r);
+      alert(`✅ "${r.title}" נוסף ושועתק ל-GitHub!\nכל המשתמשים יראו אותו בפתיחה הבאה.`);
+    }catch(e){
+      alert(`✅ "${r.title}" נוסף מקומית.\n⚠️ סנכרון GitHub נכשל: ${e.message}`);
+    }
+  }else{
+    alert(`✅ "${r.title}" נוסף!\n💡 הגדר GitHub Token בפרופיל כדי לשתף עם כולם.`);
+  }
+  S.previewRecipe=null;S.srchResult=null;pgSearch();
+}
+
 function rateR(id,stars){
   if(!CU){alert('יש להתחבר כדי לדרג');return;}
   const recs=gR();const r=recs.find(x=>x.id===id);if(!r)return;
@@ -502,7 +464,7 @@ function rateR(id,stars){
 }
 
 // ══════════════════════════════════════════
-//  SEARCH — Hebrew input, full translation pipeline
+//  SEARCH — Hebrew input, full translation
 // ══════════════════════════════════════════
 function pgSearch(){
   nav(null,null,'חיפוש');
@@ -510,7 +472,7 @@ function pgSearch(){
   if(!scr.querySelector('#srch-in')){
     scr.innerHTML=`
       <div style="padding:12px 14px">
-        <input id="srch-in" class="fi" type="search" inputmode="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="חפש בעברית: עוף בתנור, מרק, פסטה..." style="font-size:15px;padding:12px 14px">
+        <input id="srch-in" class="fi" type="search" inputmode="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="חפש בעברית: עוף, מרק, פסטה..." style="font-size:15px;padding:12px 14px">
       </div>
       <div id="srch-local"></div>
       <div id="srch-net" style="padding:0 14px 12px"></div>
@@ -531,53 +493,29 @@ function _doSrch(){
     loc.innerHTML=`<div style="padding:24px;text-align:center;color:#888;font-size:13px">הקלד לחיפוש (עברית או אנגלית)...</div>`;
     net.innerHTML='';if(prev)prev.innerHTML='';return;
   }
-  const found=appR().filter(r=>{const qq=q.toLowerCase();return(r.title||'').toLowerCase().includes(qq)||(r.chefName||'').toLowerCase().includes(qq)||(r.desc||'').toLowerCase().includes(qq)||(r.cat||'').toLowerCase().includes(qq)||(r.ings||[]).some(g=>g.n.toLowerCase().includes(qq));});
-  loc.innerHTML=found.length===0
-    ?`<div style="padding:14px 14px 6px;text-align:center;color:#888;font-size:13px">לא נמצאו תוצאות מקומיות עבור "${q}"</div>`
-    :`<div style="padding:8px 14px 4px;font-size:12px;color:#888;font-weight:700">נמצאו ${found.length} באפליקציה</div>`+found.map(r=>rCard(r)).join('');
-
-  if(S.srchLoading){
-    net.innerHTML=`<div style="background:#F0F9FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:13px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:22px">🌐</div>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:700;color:#1e40af">מחפש ומתרגם לעברית...</div>
-        <div id="srch-status" style="font-size:11px;color:#666;margin-top:3px">${S.srchStatus||'מאתר מתכון...'}</div>
-      </div>
-    </div>`;
-  }else{
-    net.innerHTML=`<button onclick="searchInternet('${q.replace(/'/g,"\\'")}',this)" style="width:100%;padding:13px;background:#3C3489;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px"><span>🌐</span><span>${found.length===0?`חפש "${q}" באינטרנט (תרגום אוטומטי לעברית)`:`עוד מתכונים: חפש "${q}" באינטרנט`}</span></button>`;
-  }
+  const found=allAppR().filter(r=>{const qq=q.toLowerCase();return(r.title||'').toLowerCase().includes(qq)||(r.chefName||'').toLowerCase().includes(qq)||(r.desc||'').toLowerCase().includes(qq)||(r.cat||'').toLowerCase().includes(qq)||(r.ings||[]).some(g=>g.n.toLowerCase().includes(qq));});
+  loc.innerHTML=found.length===0?`<div style="padding:14px 14px 6px;text-align:center;color:#888;font-size:13px">לא נמצאו תוצאות מקומיות עבור "${q}"</div>`:`<div style="padding:8px 14px 4px;font-size:12px;color:#888;font-weight:700">נמצאו ${found.length} באפליקציה</div>`+found.map(r=>rCard(r)).join('');
+  net.innerHTML=S.srchLoading
+    ?`<div style="background:#F0F9FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:13px;display:flex;align-items:center;gap:10px"><div style="font-size:22px">🌐</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1e40af">מחפש ומתרגם לעברית...</div><div id="srch-status" style="font-size:11px;color:#666;margin-top:3px">${S.srchStatus||''}</div></div></div>`
+    :`<button onclick="searchInternet('${q.replace(/'/g,"\\'")}',this)" style="width:100%;padding:13px;background:#3C3489;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px"><span>🌐</span><span>${found.length===0?`חפש "${q}" באינטרנט`:`עוד מתכונים: "${q}" מהאינטרנט`}</span></button>`;
   if(prev&&S.srchResult)prev.innerHTML=renderPreview(S.srchResult);
   else if(prev)prev.innerHTML='';
 }
 
-function updStatus(msg){
-  S.srchStatus=msg;
-  const el=document.getElementById('srch-status');
-  if(el)el.textContent=msg;
-}
+function updStatus(msg){S.srchStatus=msg;const el=document.getElementById('srch-status');if(el)el.textContent=msg;}
 
 async function searchInternet(q){
   S.srchLoading=true;S.srchResult=null;S.srchStatus='';_doSrch();
-
   try{
-    // Step 1: Translate Hebrew query → English
     updStatus('מתרגם חיפוש לאנגלית...');
     const englishQuery=await hebrewToEnglish(q);
-
-    // Step 2: Search TheMealDB
     updStatus(`מחפש: "${englishQuery}"...`);
-    const url=`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(englishQuery)}`;
-    const res=await fetch(url,{mode:'cors'});
+    const res=await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(englishQuery)}`,{mode:'cors'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
-
     let meal=null;
-    if(data.meals&&data.meals.length>0){
-      // Prefer meal from known area with famous chef
-      meal=data.meals.find(m=>AREA_CHEF[m.strArea])||data.meals[0];
-    }else{
-      // Try single word from the translated query
+    if(data.meals&&data.meals.length>0)meal=data.meals.find(m=>AREA_CHEF[m.strArea])||data.meals[0];
+    if(!meal){
       const words=englishQuery.split(' ');
       for(const word of words){
         if(word.length<3)continue;
@@ -587,242 +525,102 @@ async function searchInternet(q){
         if(d2.meals&&d2.meals.length>0){meal=d2.meals.find(m=>AREA_CHEF[m.strArea])||d2.meals[0];break;}
       }
     }
-
-    if(!meal){
-      // Try category filter
-      updStatus('מחפש בקטגוריות...');
-      const catWords=['Chicken','Beef','Pasta','Seafood','Dessert','Vegetarian','Soup','Salad'];
-      for(const cat of catWords){
-        if(englishQuery.toLowerCase().includes(cat.toLowerCase())||q.includes(HE_EN_DICT[cat.toLowerCase()]||'')){
-          const cr=await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?c=${cat}`,{mode:'cors'});
-          const cd=await cr.json();
-          if(cd.meals){
-            const dr=await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${cd.meals[0].idMeal}`,{mode:'cors'});
-            const dd=await dr.json();
-            if(dd.meals){meal=dd.meals[0];break;}
-          }
-        }
-      }
-    }
-
-    if(!meal){
-      S.srchLoading=false;_doSrch();
-      const net=document.getElementById('srch-net');
-      if(net)net.innerHTML+=`<div style="background:#FEF9C3;border:1px solid #BA7517;border-radius:10px;padding:12px;margin-top:8px;font-size:13px;color:#633806">לא נמצא מתכון עבור "${q}". נסה מילה אחרת, או לחץ + כדי להוסיף ידנית.</div>`;
-      return;
-    }
-
-    // Step 3: Translate result → Hebrew
-    updStatus('מתרגם מתכון לעברית...');
-    const recipe=await mealToHebrew(meal, updStatus);
+    if(!meal){S.srchLoading=false;_doSrch();const net=document.getElementById('srch-net');if(net)net.innerHTML+=`<div style="background:#FEF9C3;border:1px solid #BA7517;border-radius:10px;padding:12px;margin-top:8px;font-size:13px;color:#633806">לא נמצא מתכון עבור "${q}". נסה מילה אחרת, או לחץ + להוסיף ידנית.</div>`;return;}
+    const recipe=await mealToHebrew(meal,updStatus);
     S.srchResult={recipe,source:'TheMealDB (תורגם לעברית)'};
     S.srchLoading=false;_doSrch();
     setTimeout(()=>{const p=document.getElementById('srch-preview');if(p)p.scrollIntoView({behavior:'smooth',block:'start'});},200);
-
   }catch(err){
     S.srchLoading=false;_doSrch();
-    const net=document.getElementById('srch-net');
-    if(net)net.innerHTML+=`<div style="background:#FCEBEB;color:#791F1F;font-size:12px;font-weight:700;padding:10px;border-radius:8px;margin-top:8px">שגיאת חיבור: ${err.message}</div>`;
+    const net=document.getElementById('srch-net');if(net)net.innerHTML+=`<div style="background:#FCEBEB;color:#791F1F;font-size:12px;font-weight:700;padding:10px;border-radius:8px;margin-top:8px">שגיאה: ${err.message}</div>`;
   }
 }
 
+// Search result card — shows "צפה" + "הוסף" separately
 function renderPreview(sr){
   const r=sr.recipe;
-  const nm=r.chefName||'';
-  const ms=r.michelin>0?'★'.repeat(r.michelin)+' ':'';
+  const nm=r.chefName||'';const ms=r.michelin>0?'★'.repeat(r.michelin)+' ':'';
   const ex=calcEx(r.ings.reduce((s,g)=>s+(g.c||0),0),r.ings.reduce((s,g)=>s+(g.p||0),0),r.ings.reduce((s,g)=>s+(g.f||0),0));
-  const alreadyExists=gR().find(x=>x.title.trim().toLowerCase()===r.title.trim().toLowerCase());
+  const alreadySaved=allAppR().find(x=>x.title.toLowerCase()===r.title.toLowerCase());
+  const safeTitle=r.title.replace(/'/g,"\\'");
   return`<div style="padding:0 0 8px">
     <div style="padding:8px 14px 4px;font-size:12px;color:#3C3489;font-weight:700;display:flex;align-items:center;gap:5px"><span>🌐</span><span>${sr.source}</span></div>
     <div style="margin:0 14px;background:#fff;border:2px solid #3C3489;border-radius:14px;overflow:hidden">
       <div style="padding:14px 14px 10px">
         ${nm?`<div style="font-size:12px;color:#BA7517;font-weight:700;margin-bottom:4px">${ms}${nm}</div>`:ms?`<div style="font-size:12px;color:#BA7517;font-weight:700;margin-bottom:4px">${ms}</div>`:''}
         <div style="font-size:18px;font-weight:700;margin-bottom:6px;line-height:1.3">${r.title}</div>
-        <div style="font-size:12px;color:#555;line-height:1.65;margin-bottom:8px">${r.desc}</div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="font-size:12px;color:#555;line-height:1.65;margin-bottom:8px">${r.desc||''}</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
           <span class="tag" style="background:#F0EEE6;color:#444">${r.cat}${r.sub?' / '+r.sub:''}</span>
           <span class="tag" style="background:${['','#EAF3DE','#FAEEDA','#FCEBEB'][r.diff]};color:${['','#27500A','#633806','#791F1F'][r.diff]}">${DL[r.diff]}</span>
           <span class="tag" style="background:#F0EEE6;color:#444">${r.time} דק'</span>
           ${r.quick?`<span class="tag" style="background:#EAF3DE;color:#27500A">מהיר</span>`:''}
           ${ex.carb>0?`<span class="tag" style="background:#DBEAFE;color:#1e40af">🍞${ex.carb}</span>`:''}
         </div>
+        <!-- short steps preview -->
         <div style="background:#F8F7F2;border-radius:8px;padding:10px;margin-bottom:10px">
           <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:7px">שלבי הכנה (${r.steps.length} שלבים)</div>
-          ${r.steps.slice(0,3).map((st,i)=>`<div style="display:flex;gap:8px;margin-bottom:${i<2?'6px':'0'}"><div style="width:20px;height:20px;border-radius:50%;background:#1A1A18;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${i+1}</div><div style="font-size:12px;color:#444;line-height:1.55">${st.substring(0,130)}${st.length>130?'...':''}</div></div>`).join('')}
-          ${r.steps.length>3?`<div style="font-size:11px;color:#888;margin-top:6px;padding-right:28px">+ עוד ${r.steps.length-3} שלבים</div>`:''}
+          ${r.steps.slice(0,2).map((st,i)=>`<div style="display:flex;gap:8px;margin-bottom:${i<1?'6px':'0'}"><div style="width:20px;height:20px;border-radius:50%;background:#1A1A18;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">${i+1}</div><div style="font-size:12px;color:#444;line-height:1.55">${st.substring(0,110)}${st.length>110?'...':''}</div></div>`).join('')}
+          ${r.steps.length>2?`<div style="font-size:11px;color:#888;margin-top:6px;padding-right:28px">+ עוד ${r.steps.length-2} שלבים במתכון המלא</div>`:''}
         </div>
         <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px">רכיבים (${r.ings.length})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px">${r.ings.slice(0,8).map(g=>`<span style="background:#F0EEE6;border-radius:6px;padding:3px 8px;font-size:11px;color:#444">${g.n}</span>`).join('')}${r.ings.length>8?`<span style="font-size:11px;color:#888">+${r.ings.length-8}</span>`:''}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${r.ings.slice(0,6).map(g=>`<span style="background:#F0EEE6;border-radius:6px;padding:3px 8px;font-size:11px;color:#444">${g.n}</span>`).join('')}${r.ings.length>6?`<span style="font-size:11px;color:#888">+${r.ings.length-6}</span>`:''}</div>
       </div>
-      <div style="display:flex;gap:8px;padding:0 14px 14px">
-        ${alreadyExists
-          ?`<div style="flex:1;padding:11px;background:#EAF3DE;border-radius:9px;font-size:13px;font-weight:700;color:#27500A;text-align:center">✅ כבר קיים באפליקציה</div>`
-          :`<button onclick="addNetRecipe()" style="flex:1;padding:11px;background:#27500A;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✅ הוסף לאפליקציה</button>`}
-        <button onclick="S.srchResult=null;_doSrch()" style="padding:11px 14px;background:#fff;color:#555;border:2px solid #C8C6BE;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✕</button>
+      <!-- ACTION BUTTONS -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 14px">
+        <button onclick="_viewPreviewRecipe()" style="padding:11px;background:#1A1A18;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">👁 צפה במתכון</button>
+        ${alreadySaved
+          ?`<div style="padding:11px;background:#EAF3DE;border-radius:9px;font-size:13px;font-weight:700;color:#27500A;text-align:center">✅ כבר שמור</div>`
+          :`<button onclick="_addPreviewRecipe()" style="padding:11px;background:#27500A;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✅ הוסף לאפליקציה</button>`}
       </div>
+      <button onclick="S.srchResult=null;_doSrch()" style="width:100%;padding:9px;background:#F8F7F2;color:#888;border:none;border-top:1px solid #E0DED6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">✕ בטל</button>
     </div>
   </div>`;
 }
-function addNetRecipe(){
+
+function _viewPreviewRecipe(){if(S.srchResult){previewRecipe(S.srchResult.recipe);}}
+async function _addPreviewRecipe(){
   if(!S.srchResult)return;
   const r=S.srchResult.recipe;
-  if(gR().find(x=>x.title.trim().toLowerCase()===r.title.trim().toLowerCase())){alert(`"${r.title}" כבר קיים!`);return;}
-  r.approved=true;const recs=gR();recs.push(r);sR(recs);
-  alert(`✅ "${r.title}" נוסף בהצלחה!`);
+  if(allAppR().find(x=>x.title.toLowerCase()===r.title.toLowerCase())){alert(`"${r.title}" כבר קיים!`);return;}
+  r.approved=true;
+  const recs=gR();recs.push(r);sR(recs);
+  // Try GitHub sync
+  const token=GH.token();
+  if(token){
+    try{
+      const el=document.querySelector('[onclick="_addPreviewRecipe()"]');
+      if(el){el.textContent='⏳ שומר...';el.disabled=true;}
+      await GH.pushRecipe(r);
+      alert(`✅ "${r.title}" נוסף ושועתק ל-GitHub!\nכל המשתמשים יראו אותו בפתיחה הבאה.`);
+    }catch(e){
+      alert(`✅ "${r.title}" נוסף מקומית.\n⚠️ GitHub: ${e.message}\nהגדר GitHub Token בפרופיל לשיתוף.`);
+    }
+  }else{
+    alert(`✅ "${r.title}" נוסף!\n💡 הגדר GitHub Token בפרופיל → הגדרות GitHub לשיתוף עם כולם.`);
+  }
   S.srchResult=null;S.srch='';
   const inp=document.getElementById('srch-in');if(inp)inp.value='';
   _doSrch();
 }
 
 // ══════════════════════════════════════════
-//  OCR SCAN — fixed parser
+//  OCR SCAN
 // ══════════════════════════════════════════
 let _tessLib=null;
-function loadTess(cb){
-  if(_tessLib){cb(_tessLib);return;}
-  const s=document.createElement('script');
-  s.src='https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js';
-  s.onload=()=>{_tessLib=window.Tesseract;cb(_tessLib);};
-  s.onerror=()=>cb(null);
-  document.head.appendChild(s);
-}
-function preprocessImg(dataUrl,cb){
-  const img=new Image();
-  img.onload=()=>{
-    const scale=Math.min(2000/img.width,2000/img.height,4);
-    const c=document.createElement('canvas');c.width=img.width*scale;c.height=img.height*scale;
-    const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);
-    const id=ctx.getImageData(0,0,c.width,c.height);const d=id.data;
-    for(let i=0;i<d.length;i+=4){
-      const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-      const v=g<128?Math.max(0,g-60):Math.min(255,g+60);
-      d[i]=d[i+1]=d[i+2]=v;
-    }
-    ctx.putImageData(id,0,0);cb(c.toDataURL('image/png'));
-  };img.src=dataUrl;
-}
-
-function parseNutrition(text){
-  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
-  const result={name:'',carbs:null,protein:null,fat:null,calories:null};
-  for(const line of lines){
-    const l=line.toLowerCase().replace(/,/g,'.');
-    if(result.calories===null&&/energy|calories|אנרגיה|קלוריות/i.test(l)){
-      const nums=(l.match(/\d+\.?\d*/g)||[]).map(Number).filter(n=>n>=50&&n<=900);
-      if(nums.length)result.calories=Math.max(...nums);
-    }
-    if(result.carbs===null&&/(?:total.{0,10}carb|סך.{0,8}פחמ|פחמימות.{0,4}כולל|carbohydrate)/i.test(l)&&!/sugar|סוכר|polyol|פולי|fiber|סיב|dietary/i.test(l)){
-      const nums=(l.match(/\d+\.?\d*/g)||[]).map(Number).filter(n=>n>=0&&n<=100);
-      if(nums.length)result.carbs=Math.max(...nums);
-    }
-    if(result.protein===null&&/protein|חלבון/i.test(l)){
-      const nums=(l.match(/\d+\.?\d*/g)||[]).map(Number).filter(n=>n>=0&&n<=100);
-      if(nums.length)result.protein=Math.max(...nums);
-    }
-    if(result.fat===null&&/(?:total.{0,6}fat|סך.{0,6}שומ|שומנים)/i.test(l)&&!/saturated|רווי|trans|טראנס/i.test(l)){
-      const nums=(l.match(/\d+\.?\d*/g)||[]).map(Number).filter(n=>n>=0&&n<=100);
-      if(nums.length)result.fat=Math.max(...nums);
-    }
-  }
-  const total=(result.carbs||0)+(result.protein||0)+(result.fat||0);
-  if(total>105){
-    result.carbs=null;result.protein=null;result.fat=null;
-    for(const line of lines){
-      const l=line.toLowerCase().replace(/,/g,'.');
-      if(result.carbs===null&&/פחמימות|carbohydrate/i.test(l)&&!/סוכר|sugar|polyol|fiber/i.test(l)){const m=l.match(/\d+\.?\d*/);if(m){const v=parseFloat(m[0]);if(v>=0&&v<=100)result.carbs=v;}}
-      if(result.protein===null&&/חלבון|protein/i.test(l)){const m=l.match(/\d+\.?\d*/);if(m){const v=parseFloat(m[0]);if(v>=0&&v<=100)result.protein=v;}}
-      if(result.fat===null&&/שומן|fat/i.test(l)&&!/רווי|saturated|trans/i.test(l)){const m=l.match(/\d+\.?\d*/);if(m){const v=parseFloat(m[0]);if(v>=0&&v<=100)result.fat=v;}}
-    }
-  }
-  if(!result.calories&&result.carbs!==null)result.calories=Math.round((result.carbs||0)*4+(result.protein||0)*4+(result.fat||0)*9);
-  const nameLine=lines.find(l=>l.length>3&&!/^\d/.test(l)&&!/תזונ|nutri|value|per|100|גרם|gram/i.test(l));
-  if(nameLine)result.name=nameLine.substring(0,50);
-  return result;
-}
-function updOcrProg(pct,msg){
-  const el=document.getElementById('ocr-prog');
-  if(!el)return;
-  el.innerHTML=`<div style="background:#F0F9FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:12px 14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:13px;font-weight:700;color:#1e40af">🔍 מנתח תמונה (OCR)</span><span style="font-size:13px;font-weight:700;color:#1e40af">${Math.round(pct)}%</span></div><div style="background:#DBEAFE;border-radius:6px;height:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:#1e40af;border-radius:6px;transition:width .3s"></div></div><div style="font-size:11px;color:#555;margin-top:5px">${msg}</div><div style="font-size:10px;color:#888;margin-top:2px">ניתוח מקומי · ללא מפתח</div></div>`;
-}
-async function handleCam(inp){
-  const file=inp.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=async(e)=>{
-    S.scan={...S.scan,img:e.target.result,ocrRunning:true,err:'',result:null};pgScan();
-    preprocessImg(e.target.result,async(processed)=>{
-      loadTess(async(Tess)=>{
-        if(!Tess){S.scan.ocrRunning=false;S.scan.err='לא הצלחתי לטעון OCR.';pgScan();return;}
-        try{
-          updOcrProg(5,'טוען...');
-          const worker=await Tess.createWorker(['heb','eng'],1,{logger:m=>{if(m.status==='recognizing text')updOcrProg(15+m.progress*80,'מזהה טקסט...');else if(m.status==='loading language traineddata')updOcrProg(8,'טוען שפה...');else if(m.status==='initializing api')updOcrProg(12,'מאתחל...');}});
-          updOcrProg(97,'מעבד...');
-          const {data:{text}}=await worker.recognize(processed);
-          await worker.terminate();
-          updOcrProg(100,'✅ הושלם!');
-          const parsed=parseNutrition(text);
-          if(parsed.name)S.scan.name=parsed.name;
-          if(parsed.carbs!==null)S.scan.carbs=parsed.carbs;
-          if(parsed.protein!==null)S.scan.prot=parsed.protein;
-          if(parsed.fat!==null)S.scan.fat=parsed.fat;
-          const hasData=parsed.carbs!==null||parsed.protein!==null||parsed.fat!==null;
-          S.scan.ocrRunning=false;
-          if(hasData){S.scan.err='';doScanCalc();}
-          else{S.scan.err='לא זוהו ערכים. נסה שוב עם תאורה טובה, או הכנס ידנית.';pgScan();}
-        }catch(err){S.scan.ocrRunning=false;S.scan.err='שגיאה: '+err.message;pgScan();}
-      });
-    });
-  };reader.readAsDataURL(file);
-}
-function pgScan(){
-  const sc=S.scan;const r=sc.result;nav(null,null,'סורק אריזות');
-  rnd2(`<div style="padding:14px">
-    <div style="border:2.5px dashed #C8C6BE;border-radius:14px;padding:20px;text-align:center;cursor:pointer;background:#FAFAF8" onclick="document.getElementById('camIn').click()" onmouseover="this.style.borderColor='#085041'" onmouseout="this.style.borderColor='#C8C6BE'">
-      ${sc.ocrRunning?`<div id="ocr-prog"><div style="background:#F0F9FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:12px"><div style="font-size:14px;font-weight:700;color:#1e40af">⏳ מנתח תמונה...</div></div></div>`:sc.img?`<img src="${sc.img}" style="max-height:130px;max-width:100%;border-radius:8px;object-fit:contain;margin-bottom:8px"><div style="font-size:12px;color:#085041;font-weight:700">📷 לחץ לצילום מחדש</div>`:`<div style="font-size:38px;margin-bottom:10px">📷</div><div style="font-size:16px;font-weight:700;color:#085041;margin-bottom:4px">צלם תווית מוצר</div><div style="font-size:12px;color:#666;line-height:1.6">OCR מקומי · ללא מפתח · עברית + אנגלית</div><div style="margin-top:12px;padding:8px 18px;background:#085041;color:#fff;border-radius:9px;font-size:13px;font-weight:700;display:inline-block">פתח מצלמה</div>`}
-    </div>
-    <div id="ocr-prog" style="margin-top:8px"></div>
-    ${sc.err?`<div style="background:#FCEBEB;color:#791F1F;font-size:13px;font-weight:700;padding:12px;border-radius:8px;margin-top:10px">${sc.err}</div>`:''}
-    ${!sc.ocrRunning&&sc.img&&!sc.err&&(sc.carbs||sc.prot||sc.fat)?`<div style="background:#DCFCE7;border:1.5px solid #86EFAC;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px;color:#166534;font-weight:700">✅ ערכים זוהו — אמת ועדכן לפי הצורך</div>`:''}
-    <div style="margin-top:12px"><div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px">דוגמאות:</div><div style="display:flex;gap:5px;flex-wrap:wrap">${DPS.map((d,i)=>`<button onclick="ldDemo(${i})" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${sc.demoIdx===i?'#085041':'#C8C6BE'};background:${sc.demoIdx===i?'#EAF3DE':'#fff'};color:${sc.demoIdx===i?'#085041':'#444'}">${d.name}</button>`).join('')}</div></div>
-    <div class="card" style="margin-top:12px">
-      <div style="font-size:13px;font-weight:700;color:#555;margin-bottom:10px">ערכים ל-100 גרם</div>
-      <div style="margin-bottom:10px"><label class="fl">שם המוצר</label><input class="fi" placeholder="קורנפלקס..." value="${sc.name}" oninput="S.scan.name=this.value"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
-        <div><label class="fl">🍞 פחמימות</label><input class="fi" type="number" inputmode="decimal" step="0.1" placeholder="75.4" value="${sc.carbs}" oninput="S.scan.carbs=this.value;S.scan.result=null"></div>
-        <div><label class="fl">🥩 חלבון</label><input class="fi" type="number" inputmode="decimal" step="0.1" placeholder="9.1" value="${sc.prot}" oninput="S.scan.prot=this.value;S.scan.result=null"></div>
-        <div><label class="fl">🥑 שומן</label><input class="fi" type="number" inputmode="decimal" step="0.1" placeholder="2.5" value="${sc.fat}" oninput="S.scan.fat=this.value;S.scan.result=null"></div>
-      </div>
-      <div style="margin-bottom:14px"><label class="fl">כמה גרם אכלת?</label><input class="fi" type="number" inputmode="numeric" placeholder="30" value="${sc.grams}" oninput="S.scan.grams=this.value;S.scan.result=null"><div style="font-size:11px;color:#888;margin-top:4px">מנה אחת = 30 גרם קורנפלקס, 100 גרם עוף וכד'</div></div>
-      <button onclick="doScanCalc()" class="btn" style="background:#085041">חשב מנות חלפין</button>
-    </div>
-    ${r?`<div class="card" style="margin-top:12px;border:2px solid #085041">
-      <div style="font-size:15px;font-weight:700;margin-bottom:2px">${sc.name||'תוצאה'}</div>
-      <div style="font-size:12px;color:#666;margin-bottom:12px">${r.g} גרם · ${r.tCal} קלוריות</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
-        <div style="background:#DBEAFE;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#1e40af">${r.ex.carb}</div><div style="font-size:11px;font-weight:700;color:#1e40af;margin-top:3px">🍞 פחמימה</div><div style="font-size:10px;color:#3b82f6;margin-top:2px">${r.tC}ג'</div></div>
-        <div style="background:#DCFCE7;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#166534">${r.ex.prot}</div><div style="font-size:11px;font-weight:700;color:#166534;margin-top:3px">🥩 חלבון</div><div style="font-size:10px;color:#22c55e;margin-top:2px">${r.tP}ג'</div></div>
-        <div style="background:#FEF9C3;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#854d0e">${r.ex.fat}</div><div style="font-size:11px;font-weight:700;color:#854d0e;margin-top:3px">🥑 שומן</div><div style="font-size:10px;color:#ca8a04;margin-top:2px">${r.tF}ג'</div></div>
-      </div>
-      <div style="background:#F8F7F2;border-radius:8px;padding:12px">
-        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:8px">כמה גרם = מנה אחת?</div>
-        ${r.portionC?`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="font-size:15px">🍞</span><span style="font-size:13px;color:#444">מנת פחמימה = <strong>${r.portionC} גרם</strong></span></div>`:''}
-        ${r.portionP?`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="font-size:15px">🥩</span><span style="font-size:13px;color:#444">מנת חלבון = <strong>${r.portionP} גרם</strong></span></div>`:''}
-        ${r.portionF?`<div style="display:flex;gap:8px"><span style="font-size:15px">🥑</span><span style="font-size:13px;color:#444">מנת שומן = <strong>${r.portionF} גרם</strong></span></div>`:''}
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid #E0DED6;font-size:10px;color:#AAA">נוסחא: 1500÷%פחמימות · 700÷%חלבון · 500÷%שומן</div>
-      </div>
-    </div>`:''}
-  </div>`);
-}
+function loadTess(cb){if(_tessLib){cb(_tessLib);return;}const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js';s.onload=()=>{_tessLib=window.Tesseract;cb(_tessLib);};s.onerror=()=>cb(null);document.head.appendChild(s);}
+function preprocessImg(dataUrl,cb){const img=new Image();img.onload=()=>{const scale=Math.min(2000/img.width,2000/img.height,4);const c=document.createElement('canvas');c.width=img.width*scale;c.height=img.height*scale;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);const id=ctx.getImageData(0,0,c.width,c.height);const d=id.data;for(let i=0;i<d.length;i+=4){const g=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];const v=g<128?Math.max(0,g-60):Math.min(255,g+60);d[i]=d[i+1]=d[i+2]=v;}ctx.putImageData(id,0,0);cb(c.toDataURL('image/png'));};img.src=dataUrl;}
+function parseNutrition(text){const lines=text.split('\n').map(l=>l.trim()).filter(l=>l.length>0);const result={name:'',carbs:null,protein:null,fat:null,calories:null};for(const line of lines){const l=line.toLowerCase().replace(/,/g,'.');if(result.calories===null&&/energy|calories|אנרגיה|קלוריות/i.test(l)){const nums=(l.match(/\d+\.?\d*/g)||[]).map(Number).filter(n=>n>=50&&n<=900);if(nums.length)result.calories=Math.max(...nums);}if(result.carbs===null&&/(?:total.{0,10}carb|סך.{0,8}פחמ|פחמימות.{0,4}כולל|carbohydrate)/i.test(l)&&!/sugar|סוכר|polyol|פולי|fiber|סיב|dietary/i.test(l)){const nums=(l.match(/\d+\.?\d*/g)||[]).map(Number).filter(n=>n>=0&&n<=100);if(nums.length)result.carbs=Math.max(...nums);}if(result.protein===null&&/protein|חלבון/i.test(l)){const nums=(l.match(/\d+\.?\d*/g)||[]).map(Number).filter(n=>n>=0&&n<=100);if(nums.length)result.protein=Math.max(...nums);}if(result.fat===null&&/(?:total.{0,6}fat|סך.{0,6}שומ|שומנים)/i.test(l)&&!/saturated|רווי|trans|טראנס/i.test(l)){const nums=(l.match(/\d+\.?\d*/g)||[]).map(Number).filter(n=>n>=0&&n<=100);if(nums.length)result.fat=Math.max(...nums);}}const total=(result.carbs||0)+(result.protein||0)+(result.fat||0);if(total>105){result.carbs=null;result.protein=null;result.fat=null;for(const line of lines){const l=line.toLowerCase().replace(/,/g,'.');if(result.carbs===null&&/פחמימות|carbohydrate/i.test(l)&&!/סוכר|sugar|polyol|fiber/i.test(l)){const m=l.match(/\d+\.?\d*/);if(m){const v=parseFloat(m[0]);if(v>=0&&v<=100)result.carbs=v;}}if(result.protein===null&&/חלבון|protein/i.test(l)){const m=l.match(/\d+\.?\d*/);if(m){const v=parseFloat(m[0]);if(v>=0&&v<=100)result.protein=v;}}if(result.fat===null&&/שומן|fat/i.test(l)&&!/רווי|saturated|trans/i.test(l)){const m=l.match(/\d+\.?\d*/);if(m){const v=parseFloat(m[0]);if(v>=0&&v<=100)result.fat=v;}}}}if(!result.calories&&result.carbs!==null)result.calories=Math.round((result.carbs||0)*4+(result.protein||0)*4+(result.fat||0)*9);const nameLine=lines.find(l=>l.length>3&&!/^\d/.test(l)&&!/תזונ|nutri|value|per|100|גרם|gram/i.test(l));if(nameLine)result.name=nameLine.substring(0,50);return result;}
+function updOcrProg(pct,msg){const el=document.getElementById('ocr-prog');if(!el)return;el.innerHTML=`<div style="background:#F0F9FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:12px 14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:13px;font-weight:700;color:#1e40af">🔍 מנתח תמונה (OCR)</span><span style="font-size:13px;font-weight:700;color:#1e40af">${Math.round(pct)}%</span></div><div style="background:#DBEAFE;border-radius:6px;height:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:#1e40af;border-radius:6px;transition:width .3s"></div></div><div style="font-size:11px;color:#555;margin-top:5px">${msg}</div><div style="font-size:10px;color:#888;margin-top:2px">ניתוח מקומי · ללא מפתח</div></div>`;}
+async function handleCam(inp){const file=inp.files[0];if(!file)return;const reader=new FileReader();reader.onload=async(e)=>{S.scan={...S.scan,img:e.target.result,ocrRunning:true,err:'',result:null};pgScan();preprocessImg(e.target.result,async(processed)=>{loadTess(async(Tess)=>{if(!Tess){S.scan.ocrRunning=false;S.scan.err='לא הצלחתי לטעון OCR.';pgScan();return;}try{updOcrProg(5,'טוען...');const worker=await Tess.createWorker(['heb','eng'],1,{logger:m=>{if(m.status==='recognizing text')updOcrProg(15+m.progress*80,'מזהה טקסט...');else if(m.status==='loading language traineddata')updOcrProg(8,'טוען שפה...');else if(m.status==='initializing api')updOcrProg(12,'מאתחל...');}});updOcrProg(97,'מעבד...');const{data:{text}}=await worker.recognize(processed);await worker.terminate();updOcrProg(100,'✅ הושלם!');const parsed=parseNutrition(text);if(parsed.name)S.scan.name=parsed.name;if(parsed.carbs!==null)S.scan.carbs=parsed.carbs;if(parsed.protein!==null)S.scan.prot=parsed.protein;if(parsed.fat!==null)S.scan.fat=parsed.fat;const hasData=parsed.carbs!==null||parsed.protein!==null||parsed.fat!==null;S.scan.ocrRunning=false;if(hasData){S.scan.err='';doScanCalc();}else{S.scan.err='לא זוהו ערכים. נסה שוב עם תאורה טובה, או הכנס ידנית.';pgScan();}}catch(err){S.scan.ocrRunning=false;S.scan.err='שגיאה: '+err.message;pgScan();}});});};reader.readAsDataURL(file);}
+function pgScan(){const sc=S.scan;const r=sc.result;nav(null,null,'סורק אריזות');rnd2(`<div style="padding:14px"><div style="border:2.5px dashed #C8C6BE;border-radius:14px;padding:20px;text-align:center;cursor:pointer;background:#FAFAF8" onclick="document.getElementById('camIn').click()" onmouseover="this.style.borderColor='#085041'" onmouseout="this.style.borderColor='#C8C6BE'">${sc.ocrRunning?`<div id="ocr-prog"><div style="background:#F0F9FF;border:1.5px solid #BFDBFE;border-radius:10px;padding:12px"><div style="font-size:14px;font-weight:700;color:#1e40af">⏳ מנתח תמונה...</div></div></div>`:sc.img?`<img src="${sc.img}" style="max-height:130px;max-width:100%;border-radius:8px;object-fit:contain;margin-bottom:8px"><div style="font-size:12px;color:#085041;font-weight:700">📷 לחץ לצילום מחדש</div>`:`<div style="font-size:38px;margin-bottom:10px">📷</div><div style="font-size:16px;font-weight:700;color:#085041;margin-bottom:4px">צלם תווית מוצר</div><div style="font-size:12px;color:#666;line-height:1.6">OCR מקומי · ללא מפתח</div><div style="margin-top:12px;padding:8px 18px;background:#085041;color:#fff;border-radius:9px;font-size:13px;font-weight:700;display:inline-block">פתח מצלמה</div>`}</div><div id="ocr-prog" style="margin-top:8px"></div>${sc.err?`<div style="background:#FCEBEB;color:#791F1F;font-size:13px;font-weight:700;padding:12px;border-radius:8px;margin-top:10px">${sc.err}</div>`:''}${!sc.ocrRunning&&sc.img&&!sc.err&&(sc.carbs||sc.prot||sc.fat)?`<div style="background:#DCFCE7;border:1.5px solid #86EFAC;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px;color:#166534;font-weight:700">✅ ערכים זוהו — אמת לפי הצורך</div>`:''}
+<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;color:#555;margin-bottom:6px">דוגמאות:</div><div style="display:flex;gap:5px;flex-wrap:wrap">${DPS.map((d,i)=>`<button onclick="ldDemo(${i})" style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${sc.demoIdx===i?'#085041':'#C8C6BE'};background:${sc.demoIdx===i?'#EAF3DE':'#fff'};color:${sc.demoIdx===i?'#085041':'#444'}">${d.name}</button>`).join('')}</div></div>
+<div class="card" style="margin-top:12px"><div style="font-size:13px;font-weight:700;color:#555;margin-bottom:10px">ערכים ל-100 גרם</div><div style="margin-bottom:10px"><label class="fl">שם המוצר</label><input class="fi" placeholder="קורנפלקס..." value="${sc.name}" oninput="S.scan.name=this.value"></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px"><div><label class="fl">🍞 פחמימות</label><input class="fi" type="number" inputmode="decimal" step="0.1" placeholder="75.4" value="${sc.carbs}" oninput="S.scan.carbs=this.value;S.scan.result=null"></div><div><label class="fl">🥩 חלבון</label><input class="fi" type="number" inputmode="decimal" step="0.1" placeholder="9.1" value="${sc.prot}" oninput="S.scan.prot=this.value;S.scan.result=null"></div><div><label class="fl">🥑 שומן</label><input class="fi" type="number" inputmode="decimal" step="0.1" placeholder="2.5" value="${sc.fat}" oninput="S.scan.fat=this.value;S.scan.result=null"></div></div><div style="margin-bottom:14px"><label class="fl">כמה גרם אכלת?</label><input class="fi" type="number" inputmode="numeric" placeholder="30" value="${sc.grams}" oninput="S.scan.grams=this.value;S.scan.result=null"><div style="font-size:11px;color:#888;margin-top:4px">למשל: 30 גרם = כוס קורנפלקס</div></div><button onclick="doScanCalc()" class="btn" style="background:#085041">חשב מנות חלפין</button></div>
+${r?`<div class="card" style="margin-top:12px;border:2px solid #085041"><div style="font-size:15px;font-weight:700;margin-bottom:2px">${sc.name||'תוצאה'}</div><div style="font-size:12px;color:#666;margin-bottom:12px">${r.g} גרם · ${r.tCal} קלוריות</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px"><div style="background:#DBEAFE;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#1e40af">${r.ex.carb}</div><div style="font-size:11px;font-weight:700;color:#1e40af;margin-top:3px">🍞 פחמימה</div><div style="font-size:10px;color:#3b82f6;margin-top:2px">${r.tC}ג'</div></div><div style="background:#DCFCE7;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#166534">${r.ex.prot}</div><div style="font-size:11px;font-weight:700;color:#166534;margin-top:3px">🥩 חלבון</div><div style="font-size:10px;color:#22c55e;margin-top:2px">${r.tP}ג'</div></div><div style="background:#FEF9C3;border-radius:10px;padding:12px;text-align:center"><div style="font-size:26px;font-weight:700;color:#854d0e">${r.ex.fat}</div><div style="font-size:11px;font-weight:700;color:#854d0e;margin-top:3px">🥑 שומן</div><div style="font-size:10px;color:#ca8a04;margin-top:2px">${r.tF}ג'</div></div></div><div style="background:#F8F7F2;border-radius:8px;padding:12px">${r.portionC?`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="font-size:15px">🍞</span><span style="font-size:13px;color:#444">מנת פחמימה = <strong>${r.portionC} גרם</strong></span></div>`:''}${r.portionP?`<div style="display:flex;gap:8px;margin-bottom:6px"><span style="font-size:15px">🥩</span><span style="font-size:13px;color:#444">מנת חלבון = <strong>${r.portionP} גרם</strong></span></div>`:''}${r.portionF?`<div style="display:flex;gap:8px"><span style="font-size:15px">🥑</span><span style="font-size:13px;color:#444">מנת שומן = <strong>${r.portionF} גרם</strong></span></div>`:''}
+<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E0DED6;font-size:10px;color:#AAA">1500÷%פחמימות · 700÷%חלבון · 500÷%שומן</div></div></div>`:''}
+</div>`);}
 function ldDemo(i){const d=DPS[i];S.scan={...S.scan,name:d.name,carbs:d.c,prot:d.p,fat:d.f,demoIdx:i,result:null,img:null,err:'',ocrRunning:false};pgScan();}
-function doScanCalc(){
-  const sc=S.scan;
-  const c=parseFloat(sc.carbs)||0,p=parseFloat(sc.prot)||0,f=parseFloat(sc.fat)||0;
-  const g=Math.min(Math.max(parseFloat(sc.grams)||100,1),2000);
-  const fc=g/100;
-  const tC=Math.round(c*fc*10)/10,tP=Math.round(p*fc*10)/10,tF=Math.round(f*fc*10)/10;
-  S.scan.grams=String(g);
-  S.scan.result={g,tC,tP,tF,tCal:Math.round(tC*4+tP*4+tF*9),ex:calcEx(tC,tP,tF),portionC:c>0?Math.round(1500/c):null,portionP:p>0?Math.round(700/p):null,portionF:f>0?Math.round(500/f):null};
-  pgScan();
-}
+function doScanCalc(){const sc=S.scan;const c=parseFloat(sc.carbs)||0,p=parseFloat(sc.prot)||0,f=parseFloat(sc.fat)||0;const g=Math.min(Math.max(parseFloat(sc.grams)||100,1),2000);const fc=g/100;const tC=Math.round(c*fc*10)/10,tP=Math.round(p*fc*10)/10,tF=Math.round(f*fc*10)/10;S.scan.grams=String(g);S.scan.result={g,tC,tP,tF,tCal:Math.round(tC*4+tP*4+tF*9),ex:calcEx(tC,tP,tF),portionC:c>0?Math.round(1500/c):null,portionP:p>0?Math.round(700/p):null,portionF:f>0?Math.round(500/f):null};pgScan();}
 
 // ══════════════════════════════════════════
 //  ADD
@@ -831,7 +629,7 @@ function pgAdd(){
   if(!CU){nav(null,null,'הוסף מתכון');rnd2(`<div style="padding:40px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🔐</div><div style="font-size:16px;font-weight:700;margin-bottom:8px">יש להתחבר</div><button class="btn" style="max-width:200px;margin:0 auto;display:block" onclick="gTab('profile')">כניסה</button></div>`);return;}
   const f=S.sf;const CL=['ראשונות','סלטים','מרקים','עיקריות','קינוחים','מהירי הכנה'];const SM={'עיקריות':['עוף','בשר','דגים','פרווה'],'קינוחים':['חלבי','פרווה']};const ns=SM[f.cat];
   nav(null,null,'הוספת מתכון');
-  if(S.sfOk){rnd2(`<div style="padding:52px 16px;text-align:center"><div style="font-size:52px;margin-bottom:14px">🎉</div><div style="font-size:18px;font-weight:700;margin-bottom:6px">המתכון הוגש לאישור!</div><div style="font-size:13px;color:#666;margin-bottom:24px">המנהל יאשר בקרוב</div><button class="btn" onclick="S.sfOk=false;S.sf={title:'',chefName:CU?.name||'',cat:'ראשונות',sub:'',diff:1,time:30,steps:[''],ings:[{n:'',q:'',g:'',cal:''}]};pgAdd()">הוסף עוד</button><button onclick="gTab('home')" style="margin-top:10px;width:100%;padding:13px;background:transparent;color:#1A1A18;border:2px solid #C8C6BE;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">בית</button></div>`);return;}
+  if(S.sfOk){rnd2(`<div style="padding:52px 16px;text-align:center"><div style="font-size:52px;margin-bottom:14px">🎉</div><div style="font-size:18px;font-weight:700;margin-bottom:6px">המתכון הוגש לאישור!</div><div style="font-size:13px;color:#666;margin-bottom:24px">המנהל יאשר ויפרסם</div><button class="btn" onclick="S.sfOk=false;S.sf={title:'',chefName:CU?.name||'',cat:'ראשונות',sub:'',diff:1,time:30,steps:[''],ings:[{n:'',q:'',g:'',cal:''}]};pgAdd()">הוסף עוד</button><button onclick="gTab('home')" style="margin-top:10px;width:100%;padding:13px;background:transparent;color:#1A1A18;border:2px solid #C8C6BE;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">בית</button></div>`);return;}
   rnd2(`<div style="padding:12px 14px 20px">
     <div style="margin-bottom:10px"><label class="fl">שם המתכון *</label><input class="fi" placeholder="למשל: קרם ברולה" value="${f.title}" oninput="S.sf.title=this.value"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><div><label class="fl">שף / מגיש</label><input class="fi" placeholder="שמך" value="${f.chefName}" oninput="S.sf.chefName=this.value"></div><div><label class="fl">קטגוריה *</label><select class="fi" onchange="S.sf.cat=this.value;S.sf.sub='';pgAdd()">${CL.map(c=>`<option${c===f.cat?' selected':''}>${c}</option>`).join('')}</select></div></div>
@@ -848,35 +646,76 @@ function doSub(){
   const f=S.sf;S.sfE='';
   if(!f.title.trim()){S.sfE='נא להזין שם מתכון';pgAdd();return;}
   const fi=f.ings.filter(g=>g.n.trim());if(fi.length<2){S.sfE='נא להוסיף לפחות 2 רכיבים';pgAdd();return;}
-  if(gR().find(r=>r.title.trim().toLowerCase()===f.title.trim().toLowerCase())){S.sfE=`"${f.title.trim()}" כבר קיים`;pgAdd();return;}
-  const recs=gR();recs.push({id:'r'+Date.now(),title:f.title.trim(),chefName:f.chefName||CU.name,chef:null,michelin:0,desc:f.desc||'מתכון קהילתי.',cat:f.cat,sub:f.sub||null,diff:f.diff,time:f.time,quick:f.time<=25,rating:0,ratings:{},rc:0,approved:false,userR:true,submittedBy:CU.id,steps:f.steps.filter(s=>s.trim()),ings:fi.map(g=>({n:g.n,q:g.q,g:g.g||'',cal:+g.cal||0,p:0,c:0,f:0,fb:0}))});
-  sR(recs);S.sfOk=true;pgAdd();
+  if(allAppR().find(r=>r.title.trim().toLowerCase()===f.title.trim().toLowerCase())){S.sfE=`"${f.title.trim()}" כבר קיים`;pgAdd();return;}
+  const newR={id:'r'+Date.now(),title:f.title.trim(),chefName:f.chefName||CU.name,chef:null,michelin:0,desc:f.desc||'מתכון קהילתי.',cat:f.cat,sub:f.sub||null,diff:f.diff,time:f.time,quick:f.time<=25,rating:0,ratings:{},rc:0,approved:false,userR:true,submittedBy:CU.id,steps:f.steps.filter(s=>s.trim()),ings:fi.map(g=>({n:g.n,q:g.q,g:g.g||'',cal:+g.cal||0,p:0,c:0,f:0,fb:0}))};
+  const recs=gR();recs.push(newR);sR(recs);S.sfOk=true;pgAdd();
 }
 
 // ══════════════════════════════════════════
-//  PROFILE
+//  PROFILE — includes GitHub settings
 // ══════════════════════════════════════════
 function pgProfile(){
   nav(null,null,'פרופיל');const ak=gAK();
+  const ghToken=GH.token();const ghOwner=GH.owner();const ghRepo=GH.repo();
   if(!CU){rnd2(`<div style="padding:32px 20px">
     <div style="text-align:center;margin-bottom:24px"><div style="font-size:52px;margin-bottom:12px">👤</div><div style="font-size:20px;font-weight:700">ברוך הבא לטעמים</div></div>
     <div class="card"><div style="margin-bottom:10px"><label class="fl">אימייל</label><input class="fi" id="li-e" type="email" inputmode="email" placeholder="you@example.com"></div><div style="margin-bottom:14px"><label class="fl">סיסמה</label><input class="fi" id="li-p" type="password" placeholder="••••••••"></div><div id="li-err" style="color:#c0392b;font-size:13px;margin-bottom:8px;display:none"></div><button onclick="doLogin()" class="btn">כניסה</button></div>
     <div style="margin-top:10px;padding:12px;background:#F8F7F2;border-radius:10px;font-size:12px;color:#888;text-align:center"><div style="font-weight:700;margin-bottom:4px">לבדיקה:</div><div>Admin: admin@taamim.co.il / admin123</div><div style="margin-top:2px">משתמש: sarah@example.com / user123</div></div>
-    <div class="card" style="margin-top:14px"><div style="font-size:14px;font-weight:700;margin-bottom:6px">🔑 מפתח API <span style="font-size:11px;font-weight:400;color:#27500A">(אופציונלי)</span></div><div style="font-size:12px;color:#555;margin-bottom:10px;line-height:1.7"><strong style="color:#27500A">✅ OCR + תרגום + TheMealDB = 100% חינמי, ללא מפתח!</strong><br>מפתח נדרש רק לחיפוש Claude AI מתקדם.</div><input class="fi" id="ak-in" type="password" placeholder="sk-ant-... (אופציונלי)" value="${ak}" style="margin-bottom:10px"><button onclick="saveAK()" class="btn">שמור מפתח</button></div>
+    ${ghBlock(ghOwner,ghRepo,ghToken)}
   </div>`);return;}
   const myR=gR().filter(r=>r.submittedBy===CU.id);const pend=gR().filter(r=>!r.approved);
   rnd2(`<div style="padding:16px 14px">
     <div class="card" style="display:flex;align-items:center;gap:14px;margin-bottom:14px"><div style="width:52px;height:52px;border-radius:50%;background:#DBEAFE;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#1e40af;flex-shrink:0">${CU.name.charAt(0)}</div><div style="flex:1"><div style="font-size:16px;font-weight:700">${CU.name}</div><div style="font-size:12px;color:#666">${CU.email}</div>${CU.role==='admin'?`<div style="display:inline-block;padding:2px 8px;border-radius:6px;background:#EEEDFE;color:#3C3489;font-size:11px;font-weight:700;margin-top:3px">מנהל מערכת</div>`:''}</div><button onclick="doLogout()" style="padding:6px 12px;background:#fff;border:2px solid #C8C6BE;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#555">יציאה</button></div>
-    <div class="card" style="margin-bottom:14px"><div style="font-size:13px;font-weight:700;margin-bottom:6px">🔑 מפתח API <span style="font-size:11px;font-weight:400;color:#27500A">(אופציונלי)</span></div><div style="font-size:12px;color:#555;margin-bottom:8px"><strong style="color:#27500A">✅ חיפוש TheMealDB + תרגום = חינמי לגמרי</strong></div><input class="fi" id="ak-in" type="password" placeholder="sk-ant-..." value="${ak}" style="margin-bottom:8px"><button onclick="saveAK()" class="btn">שמור</button></div>
+    ${ghBlock(ghOwner,ghRepo,ghToken)}
     ${CU.role==='admin'?admPanel(pend):''}
     ${myR.length>0?`<div style="font-size:14px;font-weight:700;margin-bottom:10px">המתכונים שלי (${myR.length})</div>${myR.map(r=>`<div style="background:#fff;border:1px solid #E0DED6;border-radius:12px;padding:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:13px;font-weight:700">${r.title}</div><div style="font-size:11px;color:#888;margin-top:2px">${r.approved?'✅ מאושר':'⏳ ממתין'}</div></div>${r.approved?`<button onclick="showRecipe('${r.id}')" style="padding:5px 10px;background:#1A1A18;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">צפה</button>`:''}</div>`).join('')}`:''}
   </div>`);
 }
-function saveAK(){const v=document.getElementById('ak-in')?.value.trim();if(v!==undefined){LS.set('anthropic_key',v);alert(v?'✅ מפתח נשמר!':'מפתח נמחק');}}
-function admPanel(pend){return`<div style="background:#EEEDFE;border:2px solid #7F77DD;border-radius:12px;padding:14px;margin-bottom:14px"><div style="font-size:15px;font-weight:700;color:#3C3489;margin-bottom:12px">🛡 פאנל ניהול</div>${pend.length===0?`<div style="font-size:13px;color:#666;padding:8px 0">אין ממתינים ✓</div>`:`<div style="font-size:13px;font-weight:700;margin-bottom:8px">ממתינים (${pend.length})</div>${pend.map(r=>`<div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:2px">${r.title}</div><div style="font-size:11px;color:#666;margin-bottom:8px">${r.chefName||'אנונימי'} · ${r.cat}</div><div style="display:flex;gap:8px"><button onclick="apprR('${r.id}',true)" style="flex:1;padding:8px;background:#27500A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✓ אשר</button><button onclick="apprR('${r.id}',false)" style="flex:1;padding:8px;background:#791F1F;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✗ דחה</button></div></div>`).join('')}`}<div style="margin-top:12px;border-top:1px solid rgba(63,52,137,.2);padding-top:12px"><div style="font-size:13px;font-weight:700;color:#3C3489;margin-bottom:8px">משתמשים (${gU().length})</div>${gU().map(u=>`<div style="background:#fff;border-radius:8px;padding:10px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:13px;font-weight:700">${u.name}</div><div style="font-size:11px;color:#666">${u.email} · ${u.role==='admin'?'מנהל':'משתמש'}</div></div>${u.id!=='admin'?`<button onclick="delU('${u.id}')" style="padding:5px 10px;background:#FCEBEB;color:#791F1F;border:1px solid #F7C1C1;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">מחק</button>`:'<span style="font-size:10px;color:#888">ראשי</span>'}</div>`).join('')}</div></div>`;}
-function apprR(id,ok){const recs=gR();const r=recs.find(x=>x.id===id);if(!r)return;if(ok){r.approved=true;sR(recs);alert(`✅ "${r.title}" אושר`);}else{recs.splice(recs.indexOf(r),1);sR(recs);alert(`✗ "${r.title}" נדחה`);}pgProfile();}
+
+function ghBlock(owner,repo,token){
+  return`<div class="card" style="margin-top:14px;border:1.5px solid ${token?'#27500A':'#3C3489'}">
+    <div style="font-size:14px;font-weight:700;margin-bottom:8px">🔗 הגדרות GitHub <span style="font-size:11px;font-weight:400;color:${token?'#27500A':'#888'}">${token?'✅ מחובר':'לא מוגדר'}</span></div>
+    <div style="font-size:12px;color:#555;margin-bottom:10px;line-height:1.7">
+      <strong>כיצד עובד השיתוף:</strong><br>
+      כל מתכון חדש נשמר ב-GitHub ומגיע לכל המשתמשים בפתיחה הבאה.<br>
+      📖 קריאה: חינמית לחלוטין, ללא טוקן.<br>
+      ✍️ כתיבה: נדרש Personal Access Token.
+      <a href="https://github.com/settings/tokens/new?scopes=contents&description=taamim-app" target="_blank" style="color:#3C3489;font-weight:700;display:block;margin-top:4px">⬡ צור Personal Access Token (GitHub)</a>
+      <span style="font-size:11px;color:#888">הרשאות נדרשות: repo → contents → write</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div><label class="fl">GitHub Owner</label><input class="fi" id="gh-owner" placeholder="GilReshef" value="${owner}" style="font-size:13px;padding:8px 10px"></div>
+      <div><label class="fl">Repository</label><input class="fi" id="gh-repo" placeholder="taamim" value="${repo}" style="font-size:13px;padding:8px 10px"></div>
+    </div>
+    <input class="fi" id="gh-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" value="${token}" style="margin-bottom:8px">
+    <button onclick="saveGH()" class="btn" style="background:${token?'#27500A':'#3C3489'}">שמור הגדרות GitHub</button>
+    ${token?`<button onclick="syncFromGitHub().then(()=>alert('✅ סונכרן!'))" style="margin-top:8px;width:100%;padding:10px;background:#fff;border:2px solid #27500A;color:#27500A;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">🔄 סנכרן עכשיו מ-GitHub</button>`:''}
+  </div>`;
+}
+function saveGH(){
+  const o=document.getElementById('gh-owner')?.value.trim();
+  const r=document.getElementById('gh-repo')?.value.trim();
+  const t=document.getElementById('gh-token')?.value.trim();
+  if(o)LS.set('gh_owner',o);if(r)LS.set('gh_repo',r);if(t!==undefined)LS.set('gh_token',t);
+  alert('✅ הגדרות GitHub נשמרו!');pgProfile();
+}
+function admPanel(pend){return`<div style="background:#EEEDFE;border:2px solid #7F77DD;border-radius:12px;padding:14px;margin-bottom:14px"><div style="font-size:15px;font-weight:700;color:#3C3489;margin-bottom:12px">🛡 פאנל ניהול</div>${pend.length===0?`<div style="font-size:13px;color:#666;padding:8px 0">אין ממתינים ✓</div>`:`<div style="font-size:13px;font-weight:700;margin-bottom:8px">ממתינים (${pend.length})</div>${pend.map(r=>`<div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:2px">${r.title}</div><div style="font-size:11px;color:#666;margin-bottom:8px">${r.chefName||'אנונימי'} · ${r.cat}</div><div style="display:flex;gap:8px"><button onclick="apprR('${r.id}',true)" style="flex:1;padding:8px;background:#27500A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✓ אשר ופרסם</button><button onclick="apprR('${r.id}',false)" style="flex:1;padding:8px;background:#791F1F;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✗ דחה</button></div></div>`).join('')}`}<div style="margin-top:12px;border-top:1px solid rgba(63,52,137,.2);padding-top:12px"><div style="font-size:13px;font-weight:700;color:#3C3489;margin-bottom:8px">משתמשים (${gU().length})</div>${gU().map(u=>`<div style="background:#fff;border-radius:8px;padding:10px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:13px;font-weight:700">${u.name}</div><div style="font-size:11px;color:#666">${u.email} · ${u.role==='admin'?'מנהל':'משתמש'}</div></div>${u.id!=='admin'?`<button onclick="delU('${u.id}')" style="padding:5px 10px;background:#FCEBEB;color:#791F1F;border:1px solid #F7C1C1;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">מחק</button>`:'<span style="font-size:10px;color:#888">ראשי</span>'}</div>`).join('')}</div></div>`;}
+
+async function apprR(id,ok){
+  const recs=gR();const r=recs.find(x=>x.id===id);if(!r)return;
+  if(ok){
+    r.approved=true;sR(recs);
+    // Push to GitHub
+    const token=GH.token();
+    if(token){
+      try{await GH.pushRecipe(r);alert(`✅ "${r.title}" אושר ושועתק ל-GitHub!`);}
+      catch(e){alert(`✅ "${r.title}" אושר.\n⚠️ GitHub sync נכשל: ${e.message}`);}
+    }else{alert(`✅ "${r.title}" אושר.\n💡 הגדר GitHub Token לשיתוף אוטומטי.`);}
+  }else{recs.splice(recs.indexOf(r),1);sR(recs);alert(`✗ "${r.title}" נדחה`);}
+  pgProfile();
+}
 function delU(id){if(!confirm('למחוק?'))return;sU(gU().filter(u=>u.id!==id));pgProfile();}
-function doLogin(){const e=document.getElementById('li-e')?.value.trim(),p=document.getElementById('li-p')?.value;const u=gU().find(u=>u.email===e&&u.pass===p);const err=document.getElementById('li-err');if(!u){if(err){err.style.display='block';err.textContent='שגיאה';}return;}CU=u;LS.set('cu',CU);pgProfile();}
+function doLogin(){const e=document.getElementById('li-e')?.value.trim(),p=document.getElementById('li-p')?.value;const u=gU().find(u=>u.email===e&&u.pass===p);const err=document.getElementById('li-err');if(!u){if(err){err.style.display='block';err.textContent='אימייל או סיסמה שגויים';}return;}CU=u;LS.set('cu',CU);pgProfile();}
 function doLogout(){CU=null;LS.set('cu',null);pgProfile();}
 
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
